@@ -81,32 +81,38 @@ Result DownloadFile(std::string url, std::ofstream &os)
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char *)url.c_str(), 1);
 
     ret = httpcBeginRequest(&context);
-    if (ret != 0) return ret;
+    if (ret != 0) goto _out;
 
     ret = httpcGetResponseStatusCode(&context, &status, 0);
-    if (ret != 0) return ret;
+    if (ret != 0) goto _out;
 
-    if (status != 200) return status;
-
-    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
-    if (ret != 0) return ret;
-
-    unsigned char *buffer = (unsigned char *)linearAlloc(fileSize);
-    memset(buffer, 0, fileSize);
-
-    ret = httpcDownloadData(&context, buffer, fileSize, NULL);
-    if (ret != 0)
+    if (status != 200)
     {
-        free(buffer);
-        return ret;
+        ret = status;
+        goto _out;
     }
 
-    os.write((char *)buffer, fileSize);
-    linearFree(buffer);
+    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
+    if (ret != 0) goto _out;
 
+    {
+        unsigned char *buffer = (unsigned char *)linearAlloc(fileSize);
+        memset(buffer, 0, fileSize);
+
+        ret = httpcDownloadData(&context, buffer, fileSize, NULL);
+        if (ret != 0)
+        {
+            linearFree(buffer);
+            goto _out;
+        }
+
+        os.write((char *)buffer, fileSize);
+        linearFree(buffer);
+    }
+_out:
     httpcCloseContext(&context);
 
-    return 0;
+    return ret;
 }
 
 Result ConvertToCIA(std::string dir, std::string titleId)
