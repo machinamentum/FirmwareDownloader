@@ -7,13 +7,63 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <malloc.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
 #include <3ds.h>
 
 #include "utils.h"
 #include "cia.h"
 
+#include "builtin_rootca_der.h"
+
 
 static const std::string NUS_URL = "http://nus.cdn.c.shop.nintendowifi.net/ccs/download/";
+static const std::string YLS8_URL = "https://yls8.mtheall.com/ninupdates/titlelist.php?";
+
+typedef enum
+{
+    SYS_CTR = 0,
+    SYS_KTR
+} SystemType;
+
+typedef enum
+{
+    REG_USA = 0,
+    REG_JPN,
+    REG_EUR,
+    REG_KOR,
+    REG_TWN,
+} SystemRegion;
+
+std::string GetSystemString(int sys)
+{
+    switch (sys)
+    {
+        case SYS_CTR: return "ctr";
+        case SYS_KTR: return "ktr";
+    }
+
+    return "";
+}
+
+std::string GetRegionString(int reg)
+{
+    switch (reg)
+    {
+        case REG_USA: return "e";
+        case REG_JPN: return "j";
+        case REG_EUR: return "p";
+        case REG_KOR: return "k";
+        case REG_TWN: return "t";
+    }
+
+    return "";
+}
 
 Result DownloadFile(std::string url, std::ofstream &os)
 {
@@ -38,7 +88,6 @@ Result DownloadFile(std::string url, std::ofstream &os)
     unsigned char *buffer = (unsigned char *)linearAlloc(fileSize);
     memset(buffer, 0, fileSize);
 
-    printf("Downloading file of size %d bytes\n", fileSize);
     ret = httpcDownloadData(&context, buffer, fileSize, NULL);
     if (ret != 0)
     {
@@ -118,7 +167,7 @@ int mkpath(std::string s,mode_t mode)
 {
     size_t pre=0,pos;
     std::string dir;
-    int mdret;
+    int mdret = 0;
 
     if(s[s.size()-1]!='/'){
         // force trailing / so we can handle everything in loop
@@ -184,19 +233,196 @@ Result DownloadTitle(std::string titleId, std::string version, std::string outpu
     return res;
 }
 
+Result network_request(char *hostname, char *http_netreq, std::ofstream &ofs)
+{
+    Result ret=0;
+
+    struct addrinfo hints;
+    struct addrinfo *resaddr = NULL, *resaddr_cur;
+    int sockfd;
+    u8 *readbuf = (u8 *)linearAlloc(0x400);
+
+    sslcContext sslc_context;
+    u32 RootCertChain_contexthandle=0;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd==-1)
+    {
+        printf("Failed to create the socket.\n");
+        return -1;
+    }
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if(getaddrinfo(hostname, "443", &hints, &resaddr)!=0)
+    {
+        printf("getaddrinfo() failed.\n");
+        closesocket(sockfd);
+        return -1;
+    }
+
+    for(resaddr_cur = resaddr; resaddr_cur!=NULL; resaddr_cur = resaddr_cur->ai_next)
+    {
+        if(connect(sockfd, resaddr_cur->ai_addr, resaddr_cur->ai_addrlen)==0)break;
+    }
+
+    freeaddrinfo(resaddr);
+
+    if(resaddr_cur==NULL)
+    {
+        printf("Failed to connect.\n");
+        closesocket(sockfd);
+        return -1;
+    }
+
+    ret = sslcCreateRootCertChain(&RootCertChain_contexthandle);
+    if(R_FAILED(ret))
+    {
+        printf("sslcCreateRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
+        closesocket(sockfd);
+        return ret;
+    }
+
+    ret = sslcAddTrustedRootCA(RootCertChain_contexthandle, (u8*)builtin_rootca_der, builtin_rootca_der_size, NULL);
+    if(R_FAILED(ret))
+    {
+        printf("sslcAddTrustedRootCA() failed: 0x%08x.\n", (unsigned int)ret);
+        closesocket(sockfd);
+        sslcDestroyRootCertChain(RootCertChain_contexthandle);
+        return ret;
+    }
+
+    ret = sslcCreateContext(&sslc_context, sockfd, SSLCOPT_Default, hostname);
+    if(R_FAILED(ret))
+    {
+        printf("sslcCreateContext() failed: 0x%08x.\n", (unsigned int)ret);
+        closesocket(sockfd);
+        sslcDestroyRootCertChain(RootCertChain_contexthandle);
+        return ret;
+    }
+
+    ret = sslcContextSetRootCertChain(&sslc_context, RootCertChain_contexthandle);
+    if(R_FAILED(ret))
+    {
+        printf("sslcContextSetRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
+        sslcDestroyContext(&sslc_context);
+        sslcDestroyRootCertChain(RootCertChain_contexthandle);
+        closesocket(sockfd);
+        return ret;
+    }
+
+    ret = sslcStartConnection(&sslc_context, NULL, NULL);
+    if(R_FAILED(ret))
+    {
+        printf("sslcStartConnection() failed: 0x%08x.\n", (unsigned int)ret);
+        sslcDestroyContext(&sslc_context);
+        sslcDestroyRootCertChain(RootCertChain_contexthandle);
+        closesocket(sockfd);
+        return ret;
+    }
+
+    ret = sslcWrite(&sslc_context, (u8*)http_netreq, strlen(http_netreq));
+    if(R_FAILED(ret))
+    {
+        printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
+        sslcDestroyContext(&sslc_context);
+        sslcDestroyRootCertChain(RootCertChain_contexthandle);
+        closesocket(sockfd);
+        return ret;
+    }
+
+    memset(readbuf, 0, 0x400);
+
+    while ((ret = sslcRead(&sslc_context, readbuf, 0x400-1, false)) > 0)
+    {
+        if(R_FAILED(ret))
+        {
+            printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
+            sslcDestroyContext(&sslc_context);
+            sslcDestroyRootCertChain(RootCertChain_contexthandle);
+            closesocket(sockfd);
+            return ret;
+        }
+
+        ofs.write((const char *)readbuf, ret);
+    }
+    
+    sslcDestroyContext(&sslc_context);
+    sslcDestroyRootCertChain(RootCertChain_contexthandle);
+    
+    closesocket(sockfd);
+
+    return 0;
+}
+
+Result DownloadFileSecure(std::string url, std::ofstream &ofs)
+{
+    std::string page = url.substr(url.find(".com/") + 4);
+    size_t len = url.find(".com") + 4 - (url.find("://") + 3);
+    std::string hostname = url.substr(url.find("://") + 3, len);
+    std::string req = "GET " + page + " HTTP/1.1\r\nUser-Agent: FirmwareDownloader\r\nConnection: close\r\nHost: " + hostname + "\r\n\r\n";
+    return network_request((char *)hostname.c_str(), (char *)req.c_str(), ofs);
+}
+
+Result DownloadCSV(std::string sys, std::string reg, std::string outputDir)
+{
+    std::ofstream ofs;
+    ofs.open((outputDir + "/" + sys + "_" + reg + ".csv").c_str(), std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    Result res = DownloadFileSecure(YLS8_URL + "sys=" + sys + "&csv=1" + "&reg=" + reg, ofs);
+    if (res != 0)
+    {
+        remove((outputDir + "/" + sys + "_" + reg + ".csv").c_str());
+    }
+    ofs.close();
+    return res;
+}
+
+bool FileExists (std::string name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+}
+
+Result CheckCSVFiles(std::string dir)
+{
+    for (int sys = SYS_CTR; sys <= SYS_KTR; ++sys)
+    {
+        for (int reg = REG_USA; reg <= REG_TWN; ++reg)
+        {
+            if (!FileExists(dir + "/" + GetSystemString(sys) + "_" + GetRegionString(reg) + ".csv"))
+            {
+                printf("Downloading CSV for system/region:%s/%s...", GetSystemString(sys).c_str(), GetRegionString(reg).c_str());
+                Result res = DownloadCSV(GetSystemString(sys), GetRegionString(reg), dir);
+                if (res != 0)
+                {
+                    printf("error downloading CSV: %ld\n", res);
+                    return res;
+                }
+                else
+                {
+                    printf("done\n");
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 int main()
 {
+    u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     gfxInitDefault();
     httpcInit(0);
+    soc_sharedmem = (u32 *)memalign(0x1000, soc_sharedmem_size);
+    socInit(soc_sharedmem, soc_sharedmem_size);
+    sslcInit(0);
     hidInit();
 
     consoleInit(GFX_TOP, NULL);
-    printf("Downloading Title: 0004001000021700 v2055...");
-    Result res = DownloadTitle("0004001000021700", "2055", "sdmc:/3ds/FirmwareDownloader");
-    if (res)
-        printf("Error downloading title\n");
-    else
-        printf("Download successful.\n");
+    printf("FirmwareDownloader by machinamentum\n");
+    CheckCSVFiles("sdmc:/3ds/FirmwareDownloader");
 
 
     while (aptMainLoop())
@@ -212,4 +438,6 @@ int main()
     gfxExit();
     hidExit();
     httpcExit();
+    socExit();
+    sslcExit();
 }
