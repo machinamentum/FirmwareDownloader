@@ -66,6 +66,11 @@ std::string GetRegionString(int reg)
     return "";
 }
 
+bool FileExists (std::string name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+}
+
 Result DownloadFile(std::string url, std::ofstream &os)
 {
     httpcContext context;
@@ -114,10 +119,8 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     chdir(dir.c_str());
     FILE *tik = fopen("cetk", "rb");
     if (!tik) return -1;
-    printf("processing TIK...\n");
     TIK_CONTEXT tik_context = process_tik(tik);
 
-    printf("processing TMD...\n");
     FILE *tmd = fopen((dir + "/tmd").c_str(),"rb");
     if (!tmd) return -1;
     TMD_CONTEXT tmd_context = process_tmd(tmd);
@@ -148,7 +151,6 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
     if (!output) return -2;
 
-    printf("building CIA...\n");
     int result = generate_cia(tmd_context,tik_context,output);
     if(result != 0){
         remove((dir + "/" + titleId + ".cia").c_str());
@@ -186,9 +188,17 @@ int mkpath(std::string s,mode_t mode)
     return mdret;
 }
 
+template < typename T > std::string to_string( const T& n )
+{
+    std::ostringstream stm ;
+    stm << n ;
+    return stm.str() ;
+}
+
 Result DownloadTitle(std::string titleId, std::string version, std::string outputDir)
 {
     mkpath((outputDir + "/tmp/").c_str(), 0777);
+    if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
     std::ofstream ofs;
     ofs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
     Result res = DownloadFile(NUS_URL + titleId + "/tmd." + version, ofs);
@@ -205,7 +215,6 @@ Result DownloadTitle(std::string titleId, std::string version, std::string outpu
     tmdfs.seekg(518, std::ios::beg);
     tmdfs.read((char *)&numContents, 2);
     numContents = __builtin_bswap16(numContents);
-    printf("\nnumContents:%d\n", numContents);
     for (u16 i = 0; i <= numContents; ++i)
     {
         int offset = 2820 + (48 * (i - 1));
@@ -215,9 +224,12 @@ Result DownloadTitle(std::string titleId, std::string version, std::string outpu
         std::string contentId = u32_to_hex_string(__builtin_bswap32(cid));
         ofs = std::ofstream();
         ofs.open(outputDir + "/tmp/" + contentId, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-        DownloadFile(NUS_URL + titleId + "/" + contentId, ofs);
+        Result res = DownloadFile(NUS_URL + titleId + "/" + contentId, ofs);
         ofs.close();
-        printf("Downloaded %s\n", contentId.c_str());
+        if (res != 0)
+        {
+            return res;
+        }
     }
     tmdfs.close();
 
@@ -378,11 +390,6 @@ Result DownloadCSV(std::string sys, std::string reg, std::string outputDir)
     return res;
 }
 
-bool FileExists (std::string name) {
-    struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
-}
-
 Result CheckCSVFiles(std::string dir)
 {
     for (int sys = SYS_CTR; sys <= SYS_KTR; ++sys)
@@ -518,6 +525,40 @@ std::vector<CSVEntry> LoadCSV(std::string path)
     return ParseCSVEntries(str);
 }
 
+Result DownloadFirmware(SystemType sys, SystemRegion reg, std::string versionStr, std::string dir)
+{
+    std::vector<CSVEntry> entries = LoadCSV(dir + "/" + GetSystemString(sys) +"_" + GetRegionString(reg) + ".csv");
+    std::string vstrdir = versionStr;
+    while (vstrdir.find_first_of('.') != std::string::npos)
+    {
+        vstrdir.replace(vstrdir.find_first_of('.'), 1, std::string("_"));
+    }
+    std::string updatePath = dir + "/updates/" + GetSystemString(sys) +"_" + GetRegionString(reg) + "/" + vstrdir;
+    mkpath(updatePath, 0777);
+    u32 vcode = GetVersionCodeFromString(versionStr);
+    for (CSVEntry entry : entries)
+    {
+        u32 titleVersionIndex = 0;
+        for (size_t i = 0; i < entry.updateVersions.size(); ++i)
+        {
+            u32 code = entry.updateVersions.at(i);
+            if (code <= vcode) titleVersionIndex = i;
+        }
+        printf("%s:v%lu...", entry.titleId.c_str(), entry.titleVersions.at(titleVersionIndex));
+        Result res = DownloadTitle(entry.titleId, to_string(entry.titleVersions.at(titleVersionIndex)), updatePath);
+        if (res != 0)
+        {
+            printf("error:%ld\n", res);
+        }
+        else
+        {
+            printf("OK!\n");
+        }
+    }
+
+    return 0;
+}
+
 static const std::string FDFolder = "sdmc:/3ds/FirmwareDownloader";
 
 int main()
@@ -533,16 +574,9 @@ int main()
     consoleInit(GFX_TOP, NULL);
     printf("FirmwareDownloader by machinamentum\n");
     CheckCSVFiles("sdmc:/3ds/FirmwareDownloader");
-    printf("Loading CSV...\n");
-    std::vector<CSVEntry> entries = LoadCSV("sdmc:/3ds/FirmwareDownloader/ktr_e.csv");
-    printf("done\n");
-
-    for (CSVEntry entry : entries)
-    {
-        printf("%s,%s,%ld,%ld\n", entry.titleId.c_str(), GetRegionString(entry.region).c_str(), entry.titleVersions.at(0), entry.updateVersions.at(0));
-    }
-
-
+    printf("Downloading firmware New3DS 9.3.0E\n");
+    DownloadFirmware(SYS_KTR, REG_USA, "9.3.0", FDFolder);
+    printf("Download complete\n");
 
     while (aptMainLoop())
     {
