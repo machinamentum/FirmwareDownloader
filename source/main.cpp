@@ -1,4 +1,5 @@
 #include <string>
+#include <vector>
 #include <sstream>
 #include <iomanip>
 #include <fstream>
@@ -334,6 +335,7 @@ Result network_request(char *hostname, char *http_netreq, std::ofstream &ofs)
     }
 
     memset(readbuf, 0, 0x400);
+    sslcRead(&sslc_context, readbuf, 204, false); // discard HTTP header
 
     while ((ret = sslcRead(&sslc_context, readbuf, 0x400-1, false)) > 0)
     {
@@ -371,11 +373,8 @@ Result DownloadCSV(std::string sys, std::string reg, std::string outputDir)
     std::ofstream ofs;
     ofs.open((outputDir + "/" + sys + "_" + reg + ".csv").c_str(), std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
     Result res = DownloadFileSecure(YLS8_URL + "sys=" + sys + "&csv=1" + "&reg=" + reg, ofs);
-    if (res != 0)
-    {
-        remove((outputDir + "/" + sys + "_" + reg + ".csv").c_str());
-    }
     ofs.close();
+    if (res != 0) remove((outputDir + "/" + sys + "_" + reg + ".csv").c_str());
     return res;
 }
 
@@ -410,6 +409,117 @@ Result CheckCSVFiles(std::string dir)
     return 0;
 }
 
+struct CSVEntry
+{
+    std::string titleId;
+    SystemRegion region;
+    std::vector<u32> titleVersions;
+    std::vector<u32> updateVersions;
+};
+
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
+
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, elems);
+    return elems;
+}
+
+SystemRegion CSVGetRegionFromString(std::string reg)
+{
+    if (reg.compare("USA") == 0) return REG_USA;
+    if (reg.compare("JPN") == 0) return REG_JPN;
+    if (reg.compare("EUR") == 0) return REG_EUR;
+    if (reg.compare("KOR") == 0) return REG_KOR;
+    if (reg.compare("TWN") == 0) return REG_TWN;
+
+    return (SystemRegion)-1;
+}
+
+std::vector<u32> ParseCSVTitleVersions(std::string vstr)
+{
+    std::vector<std::string> tokens = split(vstr, ' ');
+    std::vector<u32> versions;
+    for (std::string token : tokens)
+    {
+        versions.push_back(strtoul(token.substr(1).c_str(), nullptr, 10));
+    }
+    return versions;
+}
+
+std::vector<u32> ParseCSVUpdateVersions(std::string ustr)
+{
+    std::vector<std::string> tokens = split(ustr, ' ');
+    std::vector<u32> versions;
+    for (std::string token : tokens)
+    {
+        if (token.find_first_of('.') == std::string::npos) continue;
+        std::string versionstr = token.substr(0, token.find_first_of('-'));
+        while (versionstr.find_first_of('.') != std::string::npos)
+        {
+            versionstr.replace(versionstr.find_first_of('.'), 1, std::string(""));
+        }
+        versions.push_back(strtoul(versionstr.c_str(), nullptr, 10));
+    }
+    return versions;
+}
+
+u32 GetVersionCodeFromString(std::string str)
+{
+    std::string versionstr = str.substr(0, str.find_first_of('-'));
+    while (versionstr.find_first_of('.') != std::string::npos)
+    {
+        versionstr.replace(versionstr.find_first_of('.'), 1, std::string(""));
+    }
+    return strtoul(versionstr.c_str(), nullptr, 10);
+}
+
+std::vector<CSVEntry> ParseCSVEntries(std::string &csv)
+{
+    std::istringstream ss;
+    ss.str(csv);
+    std::vector<CSVEntry> entries;
+    std::string line;
+    std::getline(ss, line);
+    for (; std::getline(ss, line); )
+    {
+        if (line.compare("") == 0) continue;
+        CSVEntry entry;
+        std::vector<std::string> tokens = split(line, ',');
+        entry.titleId = tokens.at(0);
+        entry.region = CSVGetRegionFromString(tokens.at(1));
+        entry.titleVersions = ParseCSVTitleVersions(tokens.at(2));
+        entry.updateVersions = ParseCSVUpdateVersions(tokens.at(3));
+        entries.push_back(entry);
+    }
+    return entries;
+}
+
+std::vector<CSVEntry> LoadCSV(std::string path)
+{
+    std::ifstream t(path);
+    std::string str;
+
+    t.seekg(0, std::ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
+
+    str.assign((std::istreambuf_iterator<char>(t)),
+               std::istreambuf_iterator<char>());
+    t.close();
+    return ParseCSVEntries(str);
+}
+
+static const std::string FDFolder = "sdmc:/3ds/FirmwareDownloader";
+
 int main()
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
@@ -423,6 +533,15 @@ int main()
     consoleInit(GFX_TOP, NULL);
     printf("FirmwareDownloader by machinamentum\n");
     CheckCSVFiles("sdmc:/3ds/FirmwareDownloader");
+    printf("Loading CSV...\n");
+    std::vector<CSVEntry> entries = LoadCSV("sdmc:/3ds/FirmwareDownloader/ktr_e.csv");
+    printf("done\n");
+
+    for (CSVEntry entry : entries)
+    {
+        printf("%s,%s,%ld,%ld\n", entry.titleId.c_str(), GetRegionString(entry.region).c_str(), entry.titleVersions.at(0), entry.updateVersions.at(0));
+    }
+
 
 
     while (aptMainLoop())
