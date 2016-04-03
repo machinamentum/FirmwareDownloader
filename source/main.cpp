@@ -382,6 +382,7 @@ Result DownloadFileSecure(std::string url, std::ofstream &ofs)
 
 Result DownloadCSV(std::string sys, std::string reg, std::string outputDir)
 {
+    mkpath(outputDir, 0777);
     std::ofstream ofs;
     ofs.open((outputDir + "/" + sys + "_" + reg + ".csv").c_str(), std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
     Result res = DownloadFileSecure(YLS8_URL + "sys=" + sys + "&csv=1" + "&reg=" + reg, ofs);
@@ -574,18 +575,143 @@ int main()
     consoleInit(GFX_TOP, NULL);
     printf("FirmwareDownloader by machinamentum\n");
     CheckCSVFiles("sdmc:/3ds/FirmwareDownloader");
-    printf("Downloading firmware New3DS 9.3.0E\n");
-    DownloadFirmware(SYS_KTR, REG_USA, "9.3.0", FDFolder);
-    printf("Download complete\n");
+
+    SystemType sys = SYS_CTR;
+    int reg = REG_USA;
+    int major = 9;
+    int minor = 0;
+    int fix = 0;
+
+    int chooseMode = 0;
+    bool refresh = true;
 
     while (aptMainLoop())
     {
         hidScanInput();
+        if (refresh)
+        {
+            refresh = false;
+            printf("\x1b[10;0HChoose firmware:");
+            if (chooseMode == 0)
+            {
+                printf("\033[1;31m");
+            }
+            printf("%s \x1b[0m", (sys == SYS_KTR ? "New3DS" : "Old3DS"));
+            if (chooseMode == 1)
+            {
+                printf("\033[1;31m");
+            }
+            printf("%d\x1b[0m.", major);
+            if (chooseMode == 2)
+            {
+                printf("\033[1;31m");
+            }
+            printf("%d\x1b[0m.", minor);
+            if (chooseMode == 3)
+            {
+                printf("\033[1;31m");
+            }
+            printf("%d \x1b[0m", fix);
+            if (chooseMode == 4)
+            {
+                printf("\033[1;31m");
+            }
+            printf("%s\x1b[0m\n", GetRegionString((SystemRegion)reg).c_str());
+        }
 
-        if (hidKeysDown() & KEY_START) break;
+        u32 keys = hidKeysDown();
+        if (keys & (KEY_RIGHT | KEY_LEFT | KEY_UP | KEY_DOWN | KEY_A))
+        {
+            refresh = true;
+        }
+        if (keys & KEY_RIGHT)
+        {
+            chooseMode++;
+            if (chooseMode > 4) chooseMode = 0;
+        }
+
+        if (keys & KEY_LEFT)
+        {
+            chooseMode--;
+            if (chooseMode < 0) chooseMode = 4;
+        }
+
+        switch (chooseMode)
+        {
+            case 0: //sys type
+            {
+                if (keys & (KEY_DOWN | KEY_UP))
+                {
+                    sys = (sys == SYS_CTR ? SYS_KTR : SYS_CTR);
+                }
+            } break;
+
+            case 1: // major
+            {
+                if (keys & KEY_DOWN)
+                {
+                    major--;
+                    if (major < 2) major = 2;
+                }
+                if (keys & KEY_UP)
+                {
+                    major++;
+                }
+            } break;
+
+            case 2: // minor
+            {
+                if (keys & KEY_DOWN)
+                {
+                    minor--;
+                    if (minor < 0) minor = 0;
+                }
+                if (keys & KEY_UP)
+                {
+                    minor++;
+                    if (minor > 9) minor = 9;
+                }
+            } break;
+
+            case 3: // fix
+            {
+                if (keys & KEY_DOWN)
+                {
+                    fix--;
+                    if (fix < 0) fix = 0;
+                }
+                if (keys & KEY_UP)
+                {
+                    fix++;
+                    if (fix > 9) fix = 9;
+                }
+            } break;
+
+            case 4: // region
+            {
+                if (keys & KEY_DOWN)
+                {
+                    reg--;
+                    if (reg < REG_USA) reg = REG_TWN;
+                }
+                if (keys & KEY_UP)
+                {
+                    reg++;
+                    if (reg > REG_TWN) reg = REG_USA;
+                }
+            } break;
+        }
+
+        if (keys & KEY_A)
+        {
+            printf("Downloading firmware : %s %d.%d.%d%s\n", (sys == SYS_KTR ? "New3DS" : "Old3DS"), major, minor, fix, GetRegionString((SystemRegion)reg).c_str());
+            DownloadFirmware(sys, (SystemRegion)reg, to_string(major) + "." + to_string(minor) + "." + to_string(fix), FDFolder);
+            printf("Download complete\n");
+        }
+
+        if (keys & KEY_START) break;
         gfxFlushBuffers();
         gfxSwapBuffers();
-        gspWaitForVBlank();
     }
 
     gfxExit();
