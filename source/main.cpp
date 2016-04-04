@@ -508,6 +508,7 @@ std::vector<CSVEntry> ParseCSVEntries(std::string &csv)
         if (line.compare("") == 0) continue;
         CSVEntry entry;
         std::vector<std::string> tokens = split(line, ',');
+        if (tokens.size() < 4) continue;
         entry.titleId = tokens.at(0);
         entry.region = CSVGetRegionFromString(tokens.at(1));
         entry.titleVersions = ParseCSVTitleVersions(tokens.at(2));
