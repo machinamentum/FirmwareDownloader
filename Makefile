@@ -128,6 +128,12 @@ endif
 #---------------------------------------------------------------------------------
 all: $(BUILD)
 
+dist: all
+	mkdir -p $(notdir $(CURDIR))
+	cp $(TARGET).3dsx $(notdir $(CURDIR))/$(TARGET).3dsx
+	cp $(TARGET).smdh $(notdir $(CURDIR))/$(TARGET).smdh
+	zip -r $(notdir $(CURDIR)).zip $(notdir $(CURDIR))
+
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
