@@ -272,6 +272,31 @@ std::string getInput(HB_Keyboard* sHBKB)
 	return input;
 }
 
+std::istream& GetLine(std::istream& is, std::string& t)
+{
+    t.clear();
+    std::istream::sentry se(is, true);
+    std::streambuf* sb = is.rdbuf();
+
+    for (;;) {
+        int c = sb->sbumpc();
+        switch (c) {
+            case '\n':
+              return is;
+            case '\r':
+              if (sb->sgetc() == '\n')
+                sb->sbumpc();
+              return is;
+            case  EOF:
+              if (t.empty())
+                is.setstate(std::ios::eofbit);
+              return is;
+            default:
+              t += (char)c;
+        }
+    }
+}
+
 int main()
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
@@ -304,9 +329,11 @@ int main()
             std::string titleId;
             std::string key;
             input.open("/CIAngel/input.txt", std::ofstream::in);
-            std::getline(input,titleId);
-            std::getline(input,key);
+            GetLine(input, titleId);
+            GetLine(input, key);
             DownloadTitle(titleId, key, "/CIAngel");
+            
+            printf("Press START to exit.\n\n");
         }
 
 				if (keys & KEY_X)
