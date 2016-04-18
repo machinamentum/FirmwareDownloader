@@ -249,24 +249,24 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
 std::string getInput(HB_Keyboard* sHBKB)
 {
-	sHBKB->HBKB_Clean();
-	touchPosition touch;
-	u8 KBState = 4;
-	std::string input;
-	while (KBState != 1 || input.length() == 0)
-	{
-			hidScanInput();
-			hidTouchRead(&touch);
-			KBState = sHBKB->HBKB_CallKeyboard(touch);
-			input = sHBKB->HBKB_CheckKeyboardInput();
-			if (KBState != 4)
-			{
-					printf("%c[2K\r", 27);
-					printf("%s", input.c_str());
-			}
-			gfxFlushBuffers();
-			gfxSwapBuffers();
-			gspWaitForVBlank();
+    sHBKB->HBKB_Clean();
+    touchPosition touch;
+    u8 KBState = 4;
+    std::string input;
+    while (KBState != 1 || input.length() == 0)
+    {
+        hidScanInput();
+        hidTouchRead(&touch);
+        KBState = sHBKB->HBKB_CallKeyboard(touch);
+        input = sHBKB->HBKB_CheckKeyboardInput();
+        if (KBState != 4)
+        {
+            printf("%c[2K\r", 27);
+            printf("%s", input.c_str());
+        }
+            gfxFlushBuffers();
+            gfxSwapBuffers();
+            gspWaitForVBlank();
 	}
 	printf("\n");
 	return input;
@@ -309,12 +309,12 @@ int main()
 
     consoleInit(GFX_TOP, NULL);
     printf("CIAngel by cearp\n\n");
-		printf("Press Start to exit\n");
+    printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
-		printf("Press X to input a Key/ID pair and download CIA.\n\n");
+    printf("Press X to input a Key/ID pair and download CIA.\n\n");
 		
-		HB_Keyboard sHBKB;
-		touchPosition touch;
+    HB_Keyboard sHBKB;
+    touchPosition touch;
     bool refresh = true;
 
     while (aptMainLoop())
@@ -336,31 +336,30 @@ int main()
             printf("Press START to exit.\n\n");
         }
 
-				if (keys & KEY_X)
-				{
-						printf("Please enter a titleID:\n");
-						std::string titleId = getInput(&sHBKB);
-						printf("Please enter the corresponding encTitleKey:\n");
-						std::string key = getInput(&sHBKB);
-						if (titleId.length() == 16 && key.length() == 32)
-						{
-								DownloadTitle(titleId, key, "/CIAngel");
-						} else
-						{
-								printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\nPress X to try again, or Start to exit.\n");
-						}
-				}
+        if (keys & KEY_X)
+        {
+            printf("Please enter a titleID:\n");
+            std::string titleId = getInput(&sHBKB);
+            printf("Please enter the corresponding encTitleKey:\n");
+            std::string key = getInput(&sHBKB);
+            if (titleId.length() == 16 && key.length() == 32)
+            {
+                DownloadTitle(titleId, key, "/CIAngel");
+            } else
+            {
+                printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\nPress X to try again, or Start to exit.\n");
+            }
+        }
 
         if (keys & KEY_START) break;
 				
-				//Prevent keyboard flicker after failed input attempt
-				hidTouchRead(&touch);
-				sHBKB.HBKB_CallKeyboard(touch);
-
+        //Prevent keyboard flicker after failed input attempt
+        hidTouchRead(&touch);
+        sHBKB.HBKB_CallKeyboard(touch);
 
         gfxFlushBuffers();
         gfxSwapBuffers();
-				gspWaitForVBlank();
+        gspWaitForVBlank();
     }
 
     gfxExit();
