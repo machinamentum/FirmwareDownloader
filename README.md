@@ -11,6 +11,9 @@ License is GPL to comply with the usage of make_cdn_cia code.
 This will be improved, updated, I look forward to people contributing to this project!
 In the current for, CIAngel is limited.
 At the moment, CIAngel will read a text file (input.txt) with 2 lines.
+
 The first line must be the title id.
+
 The second line must be the encrypted title key.
-The text file must have linux line endings.
+
+**The text file must have linux line endings.**
