@@ -15,5 +15,3 @@ At the moment, CIAngel will read a text file (input.txt) with 2 lines.
 The first line must be the title id.
 
 The second line must be the encrypted title key.
-
-**The text file must have linux line endings.**
