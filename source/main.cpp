@@ -246,6 +246,33 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     return res;
 }
 
+std::istream& GetLine(std::istream& is, std::string& t)
+{
+    t.clear();
+    std::istream::sentry se(is, true);
+    std::streambuf* sb = is.rdbuf();
+    bool eolFound = false;
+    while (!eolFound) {
+        char c = (char) sb->sbumpc();
+        if (c == '\n') {
+            eolFound = true;
+        } else if (c == '\r') {
+            if (sb->sgetc() == '\n') {
+                sb->sbumpc();
+            }
+            eolFound = true;
+        } else if (c == std::char_traits<char>::eof()) {
+            if (t.empty()) {
+                is.setstate(std::ios::eofbit);
+            }
+            eolFound = true;
+        } else {
+            t += c;
+        }
+    }
+    return is;
+}
+
 int main()
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
@@ -274,8 +301,8 @@ int main()
             std::string titleId;
             std::string key;
             input.open("/CIAngel/input.txt", std::ofstream::in);
-            std::getline(input,titleId);
-            std::getline(input,key);
+            GetLine(input, titleId);
+            GetLine(input, key);
             DownloadTitle(titleId, key, "/CIAngel");
         }
 
