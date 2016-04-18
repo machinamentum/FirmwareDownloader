@@ -259,8 +259,7 @@ int main()
     consoleInit(GFX_TOP, NULL);
     printf("CIAngel by cearp\n\n");
     printf("Press A to read data from SD and download CIA.\n\n");
-
-    bool refresh = true;
+    printf("Press START to exit.\n\n");
 
     while (aptMainLoop())
     {
@@ -277,6 +276,8 @@ int main()
             std::getline(input,titleId);
             std::getline(input,key);
             DownloadTitle(titleId, key, "/CIAngel");
+            
+            printf("Press START to exit.\n\n");
         }
 
         if (keys & KEY_START) break;
