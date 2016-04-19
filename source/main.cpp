@@ -251,26 +251,24 @@ std::istream& GetLine(std::istream& is, std::string& t)
     t.clear();
     std::istream::sentry se(is, true);
     std::streambuf* sb = is.rdbuf();
-    bool eolFound = false;
-    while (!eolFound) {
-        char c = (char) sb->sbumpc();
-        if (c == '\n') {
-            eolFound = true;
-        } else if (c == '\r') {
-            if (sb->sgetc() == '\n') {
+
+    for (;;) {
+        int c = sb->sbumpc();
+        switch (c) {
+            case '\n':
+              return is;
+            case '\r':
+              if (sb->sgetc() == '\n')
                 sb->sbumpc();
-            }
-            eolFound = true;
-        } else if (c == std::char_traits<char>::eof()) {
-            if (t.empty()) {
+              return is;
+            case  EOF:
+              if (t.empty())
                 is.setstate(std::ios::eofbit);
-            }
-            eolFound = true;
-        } else {
-            t += c;
+              return is;
+            default:
+              t += (char)c;
         }
     }
-    return is;
 }
 
 int main()
