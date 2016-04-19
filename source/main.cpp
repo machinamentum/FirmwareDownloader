@@ -35,7 +35,10 @@ Result DownloadFile(std::string url, std::ofstream &os)
     httpcContext context;
     u32 fileSize = 0;
     Result ret = 0;
+    Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
     u32 status;
+    u32 bufSize = 0x100000;
+    u32 readSize = 0;
 
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char *)url.c_str(), 1);
 
@@ -55,17 +58,22 @@ Result DownloadFile(std::string url, std::ofstream &os)
     if (ret != 0) goto _out;
 
     {
-        unsigned char *buffer = (unsigned char *)linearAlloc(fileSize);
-        memset(buffer, 0, fileSize);
-
-        ret = httpcDownloadData(&context, buffer, fileSize, NULL);
-        if (ret != 0)
+        unsigned char *buffer = (unsigned char *)linearAlloc(bufSize);
+        if (buffer == nullptr)
         {
-            linearFree(buffer);
+            printf("Error allocating download buffer\n");
+            ret = -1;
             goto _out;
         }
 
-        os.write((char *)buffer, fileSize);
+        while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
+        {
+            memset(buffer, 0, bufSize);
+
+            dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
+            os.write((char *)buffer, readSize);
+        }
+
         linearFree(buffer);
     }
 _out:
