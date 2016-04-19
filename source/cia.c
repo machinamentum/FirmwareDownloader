@@ -220,17 +220,16 @@ int write_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *out
 	CIA_HEADER cia_header = set_cia_header(tmd_context,tik_context);
 	fseek(output,0x0,SEEK_SET);
 	fwrite(&cia_header,sizeof(cia_header),1,output);
+
+	// Make sure we end on a 64-byte boundry
+	write_align_padding(output, 64);
+
 	return 0;
 }
 
 int write_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
 	u8 cert[0x1000];
-	
-	//Seeking Offset in output
-	u32 offset = align_value(sizeof(CIA_HEADER),0x40);
-	fseek(output,offset,SEEK_SET);
-	
 	//The order of Certs in CIA goes, Root Cert, Cetk Cert, TMD Cert. In CDN format each file has it's own cert followed by a Root cert
 	
 	//Taking Root Cert from Cetk Cert chain(can be taken from TMD Cert Chain too)
@@ -250,6 +249,9 @@ int write_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *out
 	fseek(tmd_context.tmd,tmd_context.cert_offset[0],SEEK_SET);
 	fread(&cert,tmd_context.cert_size[0],1,tmd_context.tmd);
 	fwrite(&cert,tmd_context.cert_size[0],1,output);
+
+	// Make sure we end on a 64-byte boundry
+	write_align_padding(output, 64);
 	
 	return 0;
 }
@@ -259,40 +261,34 @@ int write_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 	u8 tik[tik_context.tik_size];
 	
 	u32 cert_size = get_total_cert_size(tmd_context,tik_context);
-	
-	//Seeking Offset in output
-	u32 offset = align_value(get_total_cert_size(tmd_context,tik_context),0x40) + align_value(sizeof(CIA_HEADER),0x40);
-	fseek(output,offset,SEEK_SET);
-	
+
 	memset(tik,0x0,tik_context.tik_size);
 	fseek(tik_context.tik,0x0,SEEK_SET);
 	fread(&tik,tik_context.tik_size,1,tik_context.tik);
 	fwrite(&tik,tik_context.tik_size,1,output);
 	
+	// Make sure we end on a 64-byte boundry
+	write_align_padding(output, 64);
+
 	return 0;
 }
 
 int write_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
-	//Seeking Offset in output
-	u32 offset = align_value(tik_context.tik_size,0x40) + align_value(get_total_cert_size(tmd_context,tik_context),0x40) + align_value(sizeof(CIA_HEADER),0x40);
-	fseek(output,offset,SEEK_SET);
-
 	u8 tmd[tmd_context.tmd_size];
 	memset(tmd,0x0,tmd_context.tmd_size);
 	fseek(tmd_context.tmd,0x0,SEEK_SET);
 	fread(&tmd,tmd_context.tmd_size,1,tmd_context.tmd);
 	fwrite(&tmd,tmd_context.tmd_size,1,output);
 	
+	// Make sure we end on a 64-byte boundry
+	write_align_padding(output, 64);
+
 	return 0;
 }
 
 int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
-	//Seeking Offset in output
-	u32 offset = align_value(tmd_context.tmd_size,0x40) + align_value(tik_context.tik_size,0x40) + align_value(get_total_cert_size(tmd_context,tik_context),0x40) + align_value(sizeof(CIA_HEADER),0x40);
-	fseek(output,offset,SEEK_SET);
-	
 	for(int i = 0; i < tmd_context.content_count; i++){
 		write_content_data(tmd_context.content[i],read_content_size(tmd_context.content_struct[i]),output);
 	}
