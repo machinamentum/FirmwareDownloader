@@ -16,6 +16,10 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
+#include <3ds.h>
+
+#define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
+
 //MISC
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +39,7 @@ int TruncateFile_u64(char *filename, u64 filelen);
 int fseek_64(FILE *fp, u64 file_pos, int whence);
 int makedir(const char* dir);
 char *getcwdir(char *buffer,int maxlen);
+Result DownloadFile(const char *url, FILE *os);
 //Data Size conversion
 u16 u8_to_u16(u8 *value, u8 endianness);
 u32 u8_to_u32(u8 *value, u8 endianness);

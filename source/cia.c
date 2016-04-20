@@ -32,7 +32,6 @@ int generate_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 	fclose(tik_context.tik);
 	fclose(tmd_context.tmd);
 	free(tmd_context.content_struct);
-	free(tmd_context.content);
 	return 0;
 }
 
@@ -111,27 +110,8 @@ TMD_CONTEXT process_tmd(FILE *tmd)
 	memcpy(tmd_context.title_id,tmd_struct.title_id,8);
 	
 	tmd_context.content_struct = malloc(sizeof(TMD_CONTENT_CHUNK_STRUCT)*tmd_context.content_count);
-	tmd_context.content = malloc(0x4*tmd_context.content_count);
 	for(u8 i = 0; i < tmd_context.content_count; i++){
 		tmd_context.content_struct[i] = get_tmd_content_struct(sig_size,i,tmd);
-		u8 content_id[16];
-		sprintf(content_id,"%08x",get_content_id(tmd_context.content_struct[i]));
-		
-        //Everything else is case sensitive.
-		tmd_context.content[i] = fopen(content_id,"rb");
-		if(tmd_context.content[i] == NULL){
-			for(int i = 0; i < 16; i++){
-				if(islower(content_id[i]) != 0 && isalpha(content_id[i]) != 0)
-					content_id[i] = toupper(content_id[i]);
-			}
-			tmd_context.content[i] = fopen(content_id,"rb");
-			if(tmd_context.content[i] == NULL){
-				printf("[!] Content: '%s' could not be opened\n",content_id);
-				tmd_context.result = IO_FAIL;
-				return tmd_context;
-			}
-		}
-		//print_content_chunk_info(tmd_context.content_struct[i]);
 	}
 	return tmd_context;
 }
@@ -215,6 +195,11 @@ u32 get_content_id(TMD_CONTENT_CHUNK_STRUCT content_struct)
 	return u8_to_u32(content_struct.content_id,BIG_ENDIAN);
 }
 
+u64 get_title_id(TMD_CONTEXT content_struct)
+{
+	return u8_to_u64(content_struct.title_id,BIG_ENDIAN);
+}
+
 int write_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
 	CIA_HEADER cia_header = set_cia_header(tmd_context,tik_context);
@@ -260,8 +245,6 @@ int write_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
 	u8 tik[tik_context.tik_size];
 	
-	u32 cert_size = get_total_cert_size(tmd_context,tik_context);
-
 	memset(tik,0x0,tik_context.tik_size);
 	fseek(tik_context.tik,0x0,SEEK_SET);
 	fread(&tik,tik_context.tik_size,1,tik_context.tik);
@@ -289,8 +272,17 @@ int write_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 
 int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
-	for(int i = 0; i < tmd_context.content_count; i++){
-		write_content_data(tmd_context.content[i],read_content_size(tmd_context.content_struct[i]),output);
+	for(int i = 0; i < tmd_context.content_count; i++) {
+		char content_id[16];
+		char title_id[32];
+		sprintf(content_id,"%08lx",get_content_id(tmd_context.content_struct[i]));
+		sprintf(title_id,"%016llx",get_title_id(tmd_context));
+
+		char *url = malloc(48 + strlen(NUS_URL) + 1);
+		sprintf(url, "%s%s/%s", NUS_URL, title_id, content_id);
+		DownloadFile(url, output);
+		free(url);
+
 	}
 	return 0;
 }
@@ -310,6 +302,8 @@ int write_content_data(FILE *content, u64 content_size, FILE *output)
 	fread(buffer,content_size,1,content);
 	fwrite(buffer,content_size,1,output);
 	free(buffer);
+
+	return 0;
 }
 
 TIK_STRUCT get_tik_struct(u32 sig_size, FILE *tik)
@@ -338,10 +332,10 @@ TMD_CONTENT_CHUNK_STRUCT get_tmd_content_struct(u32 sig_size, u8 index, FILE *tm
 
 void print_content_chunk_info(TMD_CONTENT_CHUNK_STRUCT content_struct)
 {
-	printf("\n[+] Content ID:    %08x\n",u8_to_u32(content_struct.content_id,BIG_ENDIAN));
+	printf("\n[+] Content ID:    %08lx\n",u8_to_u32(content_struct.content_id,BIG_ENDIAN));
 	printf("[+] Content Index: %d\n",u8_to_u16(content_struct.content_index,BIG_ENDIAN));
 	printf("[+] Content Type:  %d\n",u8_to_u16(content_struct.content_type,BIG_ENDIAN));
-	printf("[+] Content Size:  0x%x\n",u8_to_u64(content_struct.content_size,BIG_ENDIAN));
+	printf("[+] Content Size:  0x%llx\n",u8_to_u64(content_struct.content_size,BIG_ENDIAN));
 	printf("[+] SHA-256 Hash:  "); u8_hex_print_be(content_struct.sha_256_hash,0x20); printf("\n");
 }
 

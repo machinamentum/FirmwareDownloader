@@ -22,65 +22,11 @@
 #include "cia.h"
 #include "data.h"
 
-
-static const std::string NUS_URL = "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/";
 static const u16 top = 0x140;
 
 bool FileExists (std::string name){
     struct stat buffer;
     return (stat (name.c_str(), &buffer) == 0);
-}
-
-Result DownloadFile(std::string url, std::ofstream &os)
-{
-    httpcContext context;
-    u32 fileSize = 0;
-    Result ret = 0;
-    Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
-    u32 status;
-    u32 bufSize = 0x100000;
-    u32 readSize = 0;
-
-    httpcOpenContext(&context, HTTPC_METHOD_GET, (char *)url.c_str(), 1);
-
-    ret = httpcBeginRequest(&context);
-    if (ret != 0) goto _out;
-
-    ret = httpcGetResponseStatusCode(&context, &status, 0);
-    if (ret != 0) goto _out;
-
-    if (status != 200)
-    {
-        ret = status;
-        goto _out;
-    }
-
-    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
-    if (ret != 0) goto _out;
-
-    {
-        unsigned char *buffer = (unsigned char *)linearAlloc(bufSize);
-        if (buffer == nullptr)
-        {
-            printf("Error allocating download buffer\n");
-            ret = -1;
-            goto _out;
-        }
-
-        while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
-        {
-            memset(buffer, 0, bufSize);
-
-            dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
-            os.write((char *)buffer, readSize);
-        }
-
-        linearFree(buffer);
-    }
-_out:
-    httpcCloseContext(&context);
-
-    return ret;
 }
 
 Result ConvertToCIA(std::string dir, std::string titleId)
@@ -102,7 +48,6 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     if(tik_context.result != 0 || tmd_context.result != 0){
         printf("[!] Input files could not be processed successfully\n");
         free(tmd_context.content_struct);
-        free(tmd_context.content);
         fclose(tik);
         fclose(tmd);
         return -1;
@@ -175,41 +120,18 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
     std::ofstream ofs;
 
-    ofs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    Result res = DownloadFile(NUS_URL + titleId + "/tmd", ofs);
+    FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
+    if (!oh) return -1;
+    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh);
+    fclose(oh);
     if (res != 0)
     {
         printf("Could not download TMD. Internet/Title ID is OK?\n");
-        ofs.close();
         return res;
     }
-    ofs.close();
 
-    u16 numContents = 0;
     std::ifstream tmdfs;
     tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::in | std::ofstream::binary);
-    tmdfs.seekg(top+0x9E, std::ios::beg);
-    tmdfs.read((char *)&numContents, 2);
-    numContents = __builtin_bswap16(numContents);
-    for (u16 i = 0; i < numContents; ++i)
-    {
-        printf("Downloading contents - %d of %d...", i+1, numContents);
-        int offset = 0xB04 + (0x30 * i);
-        tmdfs.seekg(offset, std::ios::beg);
-        u32 cid = 0;
-        tmdfs.read((char *)&cid, 4);
-        std::string contentId = u32_to_hex_string(__builtin_bswap32(cid));
-        ofs = std::ofstream();
-        ofs.open(outputDir + "/tmp/" + contentId, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-        Result res = DownloadFile(NUS_URL + titleId + "/" + contentId, ofs);
-        ofs.close();
-        if (res != 0)
-        {
-            printf("Could not download the contents.");
-            return res;
-        }
-        printf(" DONE!\n");
-    }
 
     printf("Now creating the CIA...");
 
@@ -323,7 +245,6 @@ int main()
 		
     HB_Keyboard sHBKB;
     touchPosition touch;
-    bool refresh = true;
 
     while (aptMainLoop())
     {
