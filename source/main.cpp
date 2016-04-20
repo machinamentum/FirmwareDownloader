@@ -111,6 +111,30 @@ char* parse_string(const std::string & s)
     return buffer;
 }
 
+Result CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
+{
+    std::ofstream ofs;
+
+    ofs.open(outputFullPath, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    ofs.write(tikTemp, 0xA50);
+    ofs.close();
+
+    ofs.open(outputFullPath, std::ofstream::out | std::ofstream::in | std::ofstream::binary);
+
+    //write version
+    ofs.seekp(top+0xA6, std::ios::beg);
+    ofs.write(titleVersion, 0x2);
+
+    //write title id
+    ofs.seekp(top+0x9C, std::ios::beg);
+    ofs.write(parse_string(titleId), 0x8);
+
+    //write key
+    ofs.seekp(top+0x7F, std::ios::beg);
+    ofs.write(parse_string(encTitleKey), 0x10);
+
+    ofs.close();
+}
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string outputDir)
 {
@@ -129,38 +153,15 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
         printf("Could not download TMD. Internet/Title ID is OK?\n");
         return res;
     }
-
-    std::ifstream tmdfs;
-    tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::in | std::ofstream::binary);
-
-    printf("Now creating the CIA...");
-
-    ofs.open(outputDir + "/tmp/cetk", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    ofs.write(tikTemp, 0xA50);
-    ofs.close();
-
-    ofs.open(outputDir + "/tmp/cetk", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
-
     //read version
     char titleVersion[2];
     tmdfs.seekg(top+0x9C, std::ios::beg);
     tmdfs.read(titleVersion, 0x2);
     tmdfs.close();
 
-    //write version
-    ofs.seekp(top+0xA6, std::ios::beg);
-    ofs.write(titleVersion, 0x2);
+    CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
 
-    //write title id
-    ofs.seekp(top+0x9C, std::ios::beg);
-    ofs.write(parse_string(titleId), 0x8);
-
-    //write key
-    ofs.seekp(top+0x7F, std::ios::beg);
-    ofs.write(parse_string(encTitleKey), 0x10);
-
-    ofs.close();
-
+    printf("Now creating the CIA...");
 
     res = ConvertToCIA(outputDir + "/tmp", titleId);
     if (res != 0)
