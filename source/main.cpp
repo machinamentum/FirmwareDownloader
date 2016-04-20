@@ -244,7 +244,10 @@ int main()
     printf("CIAngel by cearp\n\n");
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
-    printf("Press X to input a Key/ID pair and download CIA.\n\n");
+    printf("Press X to input a Key/ID pair and download CIA.\n");
+    printf("Press Y to dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("\n");
+
 		
     HB_Keyboard sHBKB;
     touchPosition touch;
@@ -281,6 +284,22 @@ int main()
             {
                 printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\nPress X to try again, or Start to exit.\n");
             }
+        }
+
+        if (keys & KEY_Y)
+        {
+            std::ofstream ofs;
+            ofs.open("/CIAngel/encTitleKeys.bin", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", ofs);
+            if (res != 0)
+            {
+                printf("Could not download file.\n");
+                ofs.close();
+                return res;
+            }
+            ofs.close();
+            printf("Downloaded OK!\n");
+
         }
 
         if (keys & KEY_START) break;
