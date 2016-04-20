@@ -9,9 +9,11 @@ License is GPL to comply with the usage of make_cdn_cia code.
 
 
 This will be improved, updated, I look forward to people contributing to this project!
-In the current for, CIAngel is limited.
-At the moment, CIAngel will read a text file (input.txt) with 2 lines.
+
+
+CIAngel can read a text file (sd:/CIAngel/input.txt) that has 2 lines.
 
 The first line must be the title id.
-
 The second line must be the encrypted title key.
+
+CIAngel has a keyboard (HBKBLib) that can be used to enter a title id and key on the device!
