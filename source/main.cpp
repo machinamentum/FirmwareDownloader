@@ -245,7 +245,8 @@ int main()
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
     printf("Press X to input a Key/ID pair and download CIA.\n");
-    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com");
+    printf("Press B to generate tickets from encTitleKeys.bin\n");
     printf("\n");
 
 
@@ -300,6 +301,51 @@ int main()
             printf("Downloaded OK!\n");
 
         }
+
+        if (keys & KEY_B)
+        {
+            char titleVersion[2] = {0x00, 0x00};
+            int i = 0;
+            std::ifstream keyfile("/CIAngel/encTitleKeys.bin", std::ifstream::binary);
+            keyfile.seekg(0x10, std::ios::beg);
+            std::vector<char> buffer (0x20,0);
+
+            while(keyfile.read(buffer.data(), buffer.size()))
+            {
+                std::streamsize s=keyfile.gcount();
+
+                // **** my python code to port ****
+                // titleid = binascii.hexlify(block[0x8:0x10])
+                // key = binascii.hexlify(block[0x10:0x20])
+                // typecheck = titleid[4:8]
+                
+                // if arguments.all:
+                //     #skip updates
+                //     if (typecheck == '000e'):
+                //         continue
+                //     #skip system
+                //     if (int(typecheck,16) & 0x10):
+                //         continue
+                //     elif (typecheck == '8005'):
+                //         continue
+                //     elif (typecheck == '800f'):
+                //         continue
+                // if arguments.all or (titleid in titlelist):
+                //     processContent(titleid, key)
+
+                // we don't really need to get the version number from the TMD and inject it to the ticket, it is nice but not really needed, especially when just making a ticket
+                // makecdncia warns about it but build a good cia, it doesn't stop a cia being legit (if we are building a legit cia) if the tmd version doesn't match the ticket version.
+                // CreateTicket(std::string titleId, std::string encTitleKey, titleVersion, "/CIAngel/tickets/" + titletitleId + ".tik")
+                
+                i++;
+            }
+            printf("%d Title IDs and Keys found!\n", i);
+            printf("All tickets dumped to sd:/CIAngel/tickets/\n");
+            printf("Press START to exit.\n\n");
+
+        }
+
+        
 
         if (keys & KEY_START) break;
 
