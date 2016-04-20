@@ -154,6 +154,8 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
         return res;
     }
     //read version
+    std::ifstream tmdfs;
+    tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
     char titleVersion[2];
     tmdfs.seekg(top+0x9C, std::ios::beg);
     tmdfs.read(titleVersion, 0x2);
