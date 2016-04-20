@@ -125,7 +125,6 @@ typedef struct
 	u32 cert_size[2];
 	u16 content_count;
 	TMD_CONTENT_CHUNK_STRUCT *content_struct;
-	FILE **content;
 	
 	u16 *title_index;
 } __attribute__((__packed__)) 

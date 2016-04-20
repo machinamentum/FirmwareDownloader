@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include "lib.h"
+#include "utils.h"
 
 //MISC
 void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
@@ -204,6 +205,59 @@ return _getcwd(buffer,maxlen);
 #else
 return getcwd(buffer,maxlen);
 #endif
+}
+
+Result DownloadFile(const char *url, FILE *os)
+{
+    httpcContext context;
+    u32 fileSize = 0;
+    Result ret = 0;
+    Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
+    u32 status;
+    u32 bufSize = 0x100000;
+    u32 readSize = 0;
+    printf("Downloading URL: %s\n", url);
+    httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
+
+    ret = httpcBeginRequest(&context);
+    if (ret != 0) goto _out;
+
+    ret = httpcGetResponseStatusCode(&context, &status, 0);
+    if (ret != 0) goto _out;
+
+    if (status != 200)
+    {
+        ret = status;
+        goto _out;
+    }
+
+    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
+    if (ret != 0) goto _out;
+
+    {
+        unsigned char *buffer = (unsigned char *)linearAlloc(bufSize);
+        if (buffer == NULL)
+        {
+            printf("Error allocating download buffer\n");
+            ret = -1;
+            goto _out;
+        }
+
+        while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
+        {
+            memset(buffer, 0, bufSize);
+
+            dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
+            //os.write((char *)buffer, readSize);
+            fwrite(buffer, readSize, 1, os);
+        }
+
+        linearFree(buffer);
+    }
+_out:
+    httpcCloseContext(&context);
+
+    return ret;
 }
 
 //Data Size conversion
