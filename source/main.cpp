@@ -200,9 +200,9 @@ std::string getInput(HB_Keyboard* sHBKB)
             gfxFlushBuffers();
             gfxSwapBuffers();
             gspWaitForVBlank();
-	}
-	printf("\n");
-	return input;
+    }
+    printf("\n");
+    return input;
 }
 
 std::istream& GetLine(std::istream& is, std::string& t)
@@ -248,7 +248,7 @@ int main()
     printf("Press Y to dl encTitleKeys.bin from 3ds.nfshost.com\n");
     printf("\n");
 
-		
+
     HB_Keyboard sHBKB;
     touchPosition touch;
 
@@ -288,22 +288,21 @@ int main()
 
         if (keys & KEY_Y)
         {
-            std::ofstream ofs;
-            ofs.open("/CIAngel/encTitleKeys.bin", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", ofs);
+            FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
+            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh);
             if (res != 0)
             {
                 printf("Could not download file.\n");
-                ofs.close();
+                fclose(oh);
                 return res;
             }
-            ofs.close();
+            fclose(oh);
             printf("Downloaded OK!\n");
 
         }
 
         if (keys & KEY_START) break;
-				
+
         //Prevent keyboard flicker after failed input attempt
         hidTouchRead(&touch);
         sHBKB.HBKB_CallKeyboard(touch);
