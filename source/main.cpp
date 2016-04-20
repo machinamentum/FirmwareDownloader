@@ -245,7 +245,7 @@ int main()
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
     printf("Press X to input a Key/ID pair and download CIA.\n");
-    printf("Press Y to dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
     printf("\n");
 
 
