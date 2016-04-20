@@ -121,7 +121,6 @@ void write_align_padding(FILE *output, size_t alignment)
 {
 	long int pos = ftell(output);
 	long int usedbytes = pos & (alignment - 1);
-	printf("Used bytes: %ld  Writing: %ld\n", usedbytes, (alignment - usedbytes));
 	if (usedbytes)
 	{
 		long int padbytes = (alignment - usedbytes);
@@ -216,7 +215,6 @@ Result DownloadFile(const char *url, FILE *os)
     u32 status;
     u32 bufSize = 0x100000;
     u32 readSize = 0;
-    printf("Downloading URL: %s\n", url);
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
 
     ret = httpcBeginRequest(&context);
