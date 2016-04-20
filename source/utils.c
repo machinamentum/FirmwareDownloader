@@ -116,6 +116,21 @@ void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output)
 	fwrite(buffer,size,1,output);
 } 
 
+void write_align_padding(FILE *output, size_t alignment)
+{
+	long int pos = ftell(output);
+	long int usedbytes = pos & (alignment - 1);
+	printf("Used bytes: %ld  Writing: %ld\n", usedbytes, (alignment - usedbytes));
+	if (usedbytes)
+	{
+		long int padbytes = (alignment - usedbytes);
+		char* pad = (char*)malloc(padbytes);
+		memset(pad, 0, padbytes);
+		fwrite(pad, padbytes, 1, output);
+		free(pad);
+	}
+}
+
 u64 GetFileSize_u64(char *filename)
 {
 	u64 size;
