@@ -22,7 +22,11 @@
 #include "cia.h"
 #include "data.h"
 
+#include "svchax.h"
+
 static const u16 top = 0x140;
+static bool bSvcHaxAvailable = false;
+static bool bInstallMode = true;
 
 bool FileExists (std::string name){
     struct stat buffer;
@@ -58,9 +62,17 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
     if (!output) return -2;
 
-    int result = generate_cia(tmd_context,tik_context,output);
-    if(result != 0){
-        remove((dir + "/" + titleId + ".cia").c_str());
+    int result;
+    if (bInstallMode)
+    {
+        result = install_cia(tmd_context, tik_context);
+    }
+    else
+    {
+        result = generate_cia(tmd_context, tik_context, output);
+        if(result != 0){
+            remove((dir + "/" + titleId + ".cia").c_str());
+        }
     }
 
     return result;
@@ -111,7 +123,7 @@ char* parse_string(const std::string & s)
     return buffer;
 }
 
-Result CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
+void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
 {
     std::ofstream ofs;
 
@@ -138,10 +150,10 @@ Result CreateTicket(std::string titleId, std::string encTitleKey, char* titleVer
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string outputDir)
 {
-    printf("Starting - %s\n", titleId.c_str());
+    printf("Starting %s - %s\n", (bInstallMode ? "install" : "download"), titleId.c_str());
 
     mkpath((outputDir + "/tmp/").c_str(), 0777);
-    if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
+    //if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
     std::ofstream ofs;
 
     FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
@@ -153,6 +165,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
         printf("Could not download TMD. Internet/Title ID is OK?\n");
         return res;
     }
+
     //read version
     std::ifstream tmdfs;
     tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
@@ -163,14 +176,15 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
 
-    printf("Now creating the CIA...");
+    printf("Now %s the CIA...", (bInstallMode ? "installing" : "creating"));
 
     res = ConvertToCIA(outputDir + "/tmp", titleId);
     if (res != 0)
     {
-        printf("Could not create the CIA.");
+        printf("Could not %s the CIA.", (bInstallMode ? "install" : "create"));
         return res;
     }
+
     rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
     printf(" DONE!\n");
     printf("Enjoy the game :)\n");
@@ -230,7 +244,7 @@ std::istream& GetLine(std::istream& is, std::string& t)
     }
 }
 
-int main()
+int main(int argc, const char* argv[])
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     gfxInitDefault();
@@ -240,6 +254,20 @@ int main()
     sslcInit(0);
     hidInit();
 
+    // Trigger svchax so we can install CIAs
+    if(argc > 0) {
+        svchax_init(true);
+        if(!__ctr_svchax || !__ctr_svchax_srv) {
+            printf("Failed to acquire kernel access. Install mode disabled.\n");
+            return -1;
+        } else {
+            bSvcHaxAvailable = true;
+        }
+    }
+
+    amInit();
+    AM_InitializeExternalTitleDatabase(false);
+
     consoleInit(GFX_TOP, NULL);
     printf("CIAngel by cearp\n\n");
     printf("Press Start to exit\n");
@@ -247,6 +275,14 @@ int main()
     printf("Press X to input a Key/ID pair and download CIA.\n");
     printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
     printf("\n");
+    printf("Argc: %d\n", argc);
+    u32 titleCount;
+    Result res = AM_GetTitleCount(MEDIATYPE_SD, &titleCount);
+    if (R_FAILED(res)) {
+        printf("Failed to get title count, wtf? %lu\n", res);
+    } else {
+        printf("Title Count: %lu\n", titleCount);
+    }
 
 
     HB_Keyboard sHBKB;
@@ -311,6 +347,8 @@ int main()
         gfxSwapBuffers();
         gspWaitForVBlank();
     }
+
+    amExit();
 
     gfxExit();
     hidExit();

@@ -206,7 +206,25 @@ return getcwd(buffer,maxlen);
 #endif
 }
 
-Result DownloadFile(const char *url, FILE *os)
+void DownloadFile_InternalSave(void* out, unsigned char* buffer, u32 readSize)
+{
+	FILE* os = (FILE*)out;
+	fwrite(buffer, readSize, 1, os);
+}
+
+static u32 install_offset = 0;
+void DownloadFile_InternalInstall(void* out, unsigned char* buffer, u32 readSize)
+{
+	u32 bytesWritten;
+	Handle* handle = (Handle*)out;
+
+	FSFILE_Write(*handle, &bytesWritten, install_offset, buffer, readSize, 0);
+
+	install_offset += bytesWritten;
+}
+
+Result DownloadFile_Internal(const char *url, void *out, 
+							 void (*write)(void* out, unsigned char* buffer, u32 readSize))
 {
     httpcContext context;
     u32 fileSize = 0;
@@ -246,8 +264,7 @@ Result DownloadFile(const char *url, FILE *os)
             memset(buffer, 0, bufSize);
 
             dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
-            //os.write((char *)buffer, readSize);
-            fwrite(buffer, readSize, 1, os);
+            write(out, buffer, readSize);
         }
 
         linearFree(buffer);
@@ -256,6 +273,21 @@ _out:
     httpcCloseContext(&context);
 
     return ret;
+}
+
+
+Result DownloadFile(const char *url, FILE *os)
+{
+	return DownloadFile_Internal(url, os, DownloadFile_InternalSave);
+}
+
+
+Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
+{
+	install_offset = *offset;
+	Result res = DownloadFile_Internal(url, handle, DownloadFile_InternalInstall);
+	*offset = install_offset;
+	return res;
 }
 
 //Data Size conversion

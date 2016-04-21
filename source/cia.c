@@ -18,6 +18,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include "lib.h"
 #include "cia.h"
+#include <3ds.h>
 #define TRUE 1
 #define FALSE 0
 
@@ -33,6 +34,43 @@ int generate_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 	fclose(tmd_context.tmd);
 	free(tmd_context.content_struct);
 	return 0;
+}
+
+int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
+{
+	Handle handle;
+	Result res;
+	u64 titleId = get_title_id(tmd_context);
+	FS_MediaType dest = ((titleId >> 32) & 0x8010) != 0 ? MEDIATYPE_NAND : MEDIATYPE_SD;
+	printf("Installing to %d\n", dest);
+
+	res = AM_StartCiaInstall(dest, &handle);
+	if (R_FAILED(res))
+	{
+		printf("Error starting CIA install: %ld.\n", res);
+		return res;
+	}
+
+	u32 offset = 0;
+
+	install_cia_header(tmd_context, tik_context, &offset, handle);
+	install_cert_chain(tmd_context, tik_context, &offset, handle);
+	install_tik(tmd_context, tik_context, &offset, handle);
+	install_tmd(tmd_context, tik_context, &offset, handle);
+	install_content(tmd_context, tik_context, &offset, handle);
+	fclose(tik_context.tik);
+	fclose(tmd_context.tmd);
+	free(tmd_context.content_struct);
+
+	res = AM_FinishCiaInstall(handle);
+	//res = AM_CancelCIAInstall(handle);
+	if (R_FAILED(res))
+	{
+		printf("Error finishing CIA install.\n");
+		return res;
+	}
+
+	return res;
 }
 
 TIK_CONTEXT process_tik(FILE *tik)
@@ -287,24 +325,121 @@ int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output
 	return 0;
 }
 
-int write_content_data(FILE *content, u64 content_size, FILE *output)
+
+int install_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
 {
-	u32 buffer_size = 0x100000;
-	u8 *buffer = malloc(buffer_size);
-	memset(buffer,0x0,buffer_size);
-	while(content_size > buffer_size){
-		memset(buffer,0x0,buffer_size);
-		fread(buffer,buffer_size,1,content);
-		fwrite(buffer,buffer_size,1,output);
-		content_size -= buffer_size;
-	}
-	memset(buffer,0x0,content_size);
-	fread(buffer,content_size,1,content);
-	fwrite(buffer,content_size,1,output);
-	free(buffer);
+	u32 bytesWritten;
+	CIA_HEADER cia_header = set_cia_header(tmd_context,tik_context);
+
+	FSFILE_Write(handle, &bytesWritten, *offset, &cia_header, sizeof(cia_header), 0);
+	*offset += bytesWritten;
+
+	// Make sure we end on a 64-byte boundry
+	install_write_align_padding(handle, offset, 64);
 
 	return 0;
 }
+
+int install_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
+{
+	u32 bytesWritten;
+	u8 cert[0x1000];
+	//The order of Certs in CIA goes, Root Cert, Cetk Cert, TMD Cert. In CDN format each file has it's own cert followed by a Root cert
+	
+	//Taking Root Cert from Cetk Cert chain(can be taken from TMD Cert Chain too)
+	memset(cert,0x0,tik_context.cert_size[1]);
+	fseek(tik_context.tik,tik_context.cert_offset[1],SEEK_SET);
+	fread(&cert,tik_context.cert_size[1],1,tik_context.tik);
+	FSFILE_Write(handle, &bytesWritten, *offset, &cert, tik_context.cert_size[1], 0);
+	*offset += bytesWritten;
+	
+	//Writing Cetk Cert
+	memset(cert,0x0,tik_context.cert_size[0]);
+	fseek(tik_context.tik,tik_context.cert_offset[0],SEEK_SET);
+	fread(&cert,tik_context.cert_size[0],1,tik_context.tik);
+	FSFILE_Write(handle, &bytesWritten, *offset, &cert, tik_context.cert_size[0], 0);
+	*offset += bytesWritten;
+	
+	//Writing TMD Cert
+	memset(cert,0x0,tmd_context.cert_size[0]);
+	fseek(tmd_context.tmd,tmd_context.cert_offset[0],SEEK_SET);
+	fread(&cert,tmd_context.cert_size[0],1,tmd_context.tmd);
+	FSFILE_Write(handle, &bytesWritten, *offset, &cert, tmd_context.cert_size[0], 0);
+	*offset += bytesWritten;
+
+	// Make sure we end on a 64-byte boundry
+	install_write_align_padding(handle, offset, 64);
+	
+	return 0;
+}
+
+int install_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
+{
+	u32 bytesWritten;
+	u8 tik[tik_context.tik_size];
+	
+	memset(tik,0x0,tik_context.tik_size);
+	fseek(tik_context.tik,0x0,SEEK_SET);
+	fread(&tik,tik_context.tik_size,1,tik_context.tik);
+	FSFILE_Write(handle, &bytesWritten, *offset, &tik, tik_context.tik_size, 0);
+	*offset += bytesWritten;
+	
+	// Make sure we end on a 64-byte boundry
+	install_write_align_padding(handle, offset, 64);
+
+	return 0;
+}
+
+int install_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
+{
+	u32 bytesWritten;
+	u8 tmd[tmd_context.tmd_size];
+	memset(tmd,0x0,tmd_context.tmd_size);
+	fseek(tmd_context.tmd,0x0,SEEK_SET);
+	fread(&tmd,tmd_context.tmd_size,1,tmd_context.tmd);
+	FSFILE_Write(handle, &bytesWritten, *offset, &tmd, tmd_context.tmd_size, 0);
+	*offset += bytesWritten;
+	
+	// Make sure we end on a 64-byte boundry
+	install_write_align_padding(handle, offset, 64);
+
+	return 0;
+}
+
+int install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
+{
+	for(int i = 0; i < tmd_context.content_count; i++) {
+		char content_id[16];
+		char title_id[32];
+		sprintf(content_id,"%08lx",get_content_id(tmd_context.content_struct[i]));
+		sprintf(title_id,"%016llx",get_title_id(tmd_context));
+
+		char *url = malloc(48 + strlen(NUS_URL) + 1);
+		sprintf(url, "%s%s/%s", NUS_URL, title_id, content_id);
+		DownloadFileInstall(url, &handle, offset);
+		free(url);
+	}
+	return 0;
+}
+
+void install_write_align_padding(Handle handle, u32* offset, size_t alignment)
+{
+	long int usedbytes = *offset & (alignment - 1);
+	if (usedbytes)
+	{
+		u32 bytesWritten;
+		// Create the padding strings
+		long int padbytes = (alignment - usedbytes);
+		char* pad = (char*)malloc(padbytes);
+		memset(pad, 0, padbytes);
+
+		// Write it, and increase the offset
+		FSFILE_Write(handle, &bytesWritten, *offset, pad, padbytes, 0);
+		*offset += bytesWritten;
+		free(pad);
+	}
+}
+
 
 TIK_STRUCT get_tik_struct(u32 sig_size, FILE *tik)
 {

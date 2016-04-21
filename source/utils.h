@@ -18,7 +18,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include <3ds.h>
 
-#define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
+#define NUS_URL "http://10.0.0.249:8000/"
 
 //MISC
 #ifdef __cplusplus
@@ -40,6 +40,7 @@ int fseek_64(FILE *fp, u64 file_pos, int whence);
 int makedir(const char* dir);
 char *getcwdir(char *buffer,int maxlen);
 Result DownloadFile(const char *url, FILE *os);
+Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
 //Data Size conversion
 u16 u8_to_u16(u8 *value, u8 endianness);
 u32 u8_to_u32(u8 *value, u8 endianness);
