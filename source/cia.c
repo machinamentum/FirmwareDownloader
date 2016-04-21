@@ -67,7 +67,7 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 		AM_CancelCIAInstall(handle);
 		return res;
 	}
-	
+
 	res = AM_FinishCiaInstall(handle);
 	if (R_FAILED(res))
 	{
@@ -315,6 +315,7 @@ int write_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
 	for(int i = 0; i < tmd_context.content_count; i++) {
+		printf("Downloading content %d of %d\n", i + 1, tmd_context.content_count);
 		char content_id[16];
 		char title_id[32];
 		sprintf(content_id,"%08lx",get_content_id(tmd_context.content_struct[i]));
@@ -414,6 +415,7 @@ Result install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* of
 {
 	Result res = 0;
 	for(int i = 0; i < tmd_context.content_count; i++) {
+		printf("Installing content %d of %d\n", i + 1, tmd_context.content_count);
 		char content_id[16];
 		char title_id[32];
 		sprintf(content_id,"%08lx",get_content_id(tmd_context.content_struct[i]));
