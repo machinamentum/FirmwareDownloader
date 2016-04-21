@@ -45,9 +45,15 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 
 	// Make sure this isn't a N3DS only title being installed on an O3DS
 	u8 n3ds = false;
-	if(R_SUCCEEDED(APT_CheckNew3DS(&n3ds)) && !n3ds && ((titleId >> 28) & 0xF) == 2) {
-		printf("Title requires a N3DS.\n");
-		return -1;
+	if(R_SUCCEEDED(APT_CheckNew3DS(&n3ds)) && !n3ds)
+	{
+		// 28 bits shift = 2 is a system title for N3ds
+		// 24 bits shift = F is a N3DS exclusive game (Seems to always have 0xF7 in the titleid)
+		if (((titleId >> 28) & 0xF) == 2 || ((titleId >> 24) & 0xF) == 0xF)
+		{
+			printf("Title requires a N3DS.\n");
+			return -1;
+		}
 	}
 
 	res = AM_StartCiaInstall(dest, &handle);
