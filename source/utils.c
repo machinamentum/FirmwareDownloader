@@ -113,6 +113,9 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool)
 //IO Related
 void PrintProgress(u32 nSize, u32 nCurrent)
 {
+	// Don't attempt to calculate anything if we don't have a final size
+	if (nSize == 0) return;
+	
 	// Calculate percent and bar width
 	double fPercent = ((double)nCurrent / nSize) * 100.0;
 	u16 barDrawWidth = (fPercent / 100) * 40;

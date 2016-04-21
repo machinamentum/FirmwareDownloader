@@ -64,17 +64,14 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	if (R_FAILED(res))
 	{
 		printf("Error installing CIA.\n");
-		res = AM_CancelCIAInstall(handle);
+		AM_CancelCIAInstall(handle);
+		return res;
 	}
-	else
-	{
-		res = AM_FinishCiaInstall(handle);
-	}
-
+	
+	res = AM_FinishCiaInstall(handle);
 	if (R_FAILED(res))
 	{
 		printf("Error finishing CIA install.\n");
-		return res;
 	}
 
 	return res;

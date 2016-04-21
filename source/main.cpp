@@ -342,14 +342,15 @@ int main(int argc, const char* argv[])
             printf("Downloading encTitleKeys.bin...\n");
             FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
             Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh, true);
+            fclose(oh);
             if (res != 0)
             {
                 printf("Could not download file.\n");
-                fclose(oh);
-                return res;
             }
-            fclose(oh);
-            printf("Downloaded OK!\n");
+            else
+            {
+                printf("Downloaded OK!\n");
+            }
         }
 
         if (keys & KEY_R)
