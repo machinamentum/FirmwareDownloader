@@ -111,6 +111,26 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool)
 }
 
 //IO Related
+void PrintProgress(u32 nSize, u32 nCurrent)
+{
+	// Calculate percent and bar width
+	double fPercent = ((double)nCurrent / nSize) * 100.0;
+	u16 barDrawWidth = (fPercent / 100) * 40;
+
+	int i = 0;
+	printf("% 3.2f%% ", fPercent);
+	for (i = 0; i < barDrawWidth; i++)
+	{
+		printf("|");
+	}
+	printf("\r");
+
+	// Make sure the screen updates
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+    gspWaitForVBlank();
+}
+
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output)
 {
 	fseek_64(output,offset,SEEK_SET);
@@ -223,11 +243,12 @@ void DownloadFile_InternalInstall(void* out, unsigned char* buffer, u32 readSize
 	install_offset += bytesWritten;
 }
 
-Result DownloadFile_Internal(const char *url, void *out, 
+Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
 							 void (*write)(void* out, unsigned char* buffer, u32 readSize))
 {
     httpcContext context;
     u32 fileSize = 0;
+    u32 procSize = 0;
     Result ret = 0;
     Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
     u32 status;
@@ -265,8 +286,14 @@ Result DownloadFile_Internal(const char *url, void *out,
 
             dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
             write(out, buffer, readSize);
-        }
 
+            procSize += readSize;
+            if (bProgress)
+            {
+            	PrintProgress(fileSize, procSize);
+            }
+        }
+        printf("\n");
         linearFree(buffer);
     }
 _out:
@@ -276,16 +303,16 @@ _out:
 }
 
 
-Result DownloadFile(const char *url, FILE *os)
+Result DownloadFile(const char *url, FILE *os, bool bProgress)
 {
-	return DownloadFile_Internal(url, os, DownloadFile_InternalSave);
+	return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
 }
 
 
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
 {
 	install_offset = *offset;
-	Result res = DownloadFile_Internal(url, handle, DownloadFile_InternalInstall);
+	Result res = DownloadFile_Internal(url, handle, true, DownloadFile_InternalInstall);
 	*offset = install_offset;
 	return res;
 }

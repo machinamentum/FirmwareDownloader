@@ -22,11 +22,11 @@
 #include "cia.h"
 #include "data.h"
 
-#include "svchax.h"
+#include "svchax/svchax.h"
 
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = false;
-static bool bInstallMode = true;
+static bool bInstallMode = false;
 
 bool FileExists (std::string name){
     struct stat buffer;
@@ -158,7 +158,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
     if (!oh) return -1;
-    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh);
+    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
     fclose(oh);
     if (res != 0)
     {
@@ -176,16 +176,20 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
 
-    printf("Now %s the CIA...", (bInstallMode ? "installing" : "creating"));
+    printf("Now %s the CIA...\n", (bInstallMode ? "installing" : "creating"));
 
     res = ConvertToCIA(outputDir + "/tmp", titleId);
     if (res != 0)
     {
-        printf("Could not %s the CIA.", (bInstallMode ? "install" : "create"));
+        printf("Could not %s the CIA.\n", (bInstallMode ? "install" : "create"));
         return res;
     }
 
-    rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
+    if (!bInstallMode)
+    {
+        rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
+    }
+
     printf(" DONE!\n");
     printf("Enjoy the game :)\n");
 
@@ -269,21 +273,13 @@ int main(int argc, const char* argv[])
     AM_InitializeExternalTitleDatabase(false);
 
     consoleInit(GFX_TOP, NULL);
-    printf("CIAngel by cearp\n\n");
+    printf("CIAngel by cearp and Drakia\n\n");
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
     printf("Press X to input a Key/ID pair and download CIA.\n");
     printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("Press R to switch to Install mode (EXPERIMENTAL!)\n");
     printf("\n");
-    printf("Argc: %d\n", argc);
-    u32 titleCount;
-    Result res = AM_GetTitleCount(MEDIATYPE_SD, &titleCount);
-    if (R_FAILED(res)) {
-        printf("Failed to get title count, wtf? %lu\n", res);
-    } else {
-        printf("Title Count: %lu\n", titleCount);
-    }
-
 
     HB_Keyboard sHBKB;
     touchPosition touch;
@@ -324,8 +320,9 @@ int main(int argc, const char* argv[])
 
         if (keys & KEY_Y)
         {
+            printf("Downloading encTitleKeys.bin...\n");
             FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
-            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh);
+            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh, true);
             if (res != 0)
             {
                 printf("Could not download file.\n");
@@ -334,7 +331,27 @@ int main(int argc, const char* argv[])
             }
             fclose(oh);
             printf("Downloaded OK!\n");
+        }
 
+        if (keys & KEY_R)
+        {
+            bInstallMode = !bInstallMode;
+            if (bInstallMode)
+            {
+                if (!bSvcHaxAvailable)
+                {
+                    printf("Kernel access not available. Can't enable Install Mode.\n");
+                    bInstallMode = false;
+                }
+                else
+                {
+                    printf("Switched to Install Mode. This is EXPERIMENTAL!\n");
+                }
+            }
+            else
+            {
+                printf("Switched to Create Mode.\n");
+            }
         }
 
         if (keys & KEY_START) break;

@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 
+#include <3ds.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -189,7 +191,7 @@ int install_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* of
 int install_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
 int install_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
 int install_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
-int install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+Result install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
 void install_write_align_padding(Handle handle, u32* offset, size_t alignment);
 
 //Get Struct Functions

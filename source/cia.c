@@ -42,7 +42,6 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	Result res;
 	u64 titleId = get_title_id(tmd_context);
 	FS_MediaType dest = ((titleId >> 32) & 0x8010) != 0 ? MEDIATYPE_NAND : MEDIATYPE_SD;
-	printf("Installing to %d\n", dest);
 
 	res = AM_StartCiaInstall(dest, &handle);
 	if (R_FAILED(res))
@@ -57,13 +56,21 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	install_cert_chain(tmd_context, tik_context, &offset, handle);
 	install_tik(tmd_context, tik_context, &offset, handle);
 	install_tmd(tmd_context, tik_context, &offset, handle);
-	install_content(tmd_context, tik_context, &offset, handle);
+	res = install_content(tmd_context, tik_context, &offset, handle);
 	fclose(tik_context.tik);
 	fclose(tmd_context.tmd);
 	free(tmd_context.content_struct);
 
-	res = AM_FinishCiaInstall(handle);
-	//res = AM_CancelCIAInstall(handle);
+	if (R_FAILED(res))
+	{
+		printf("Error installing CIA.\n");
+		res = AM_CancelCIAInstall(handle);
+	}
+	else
+	{
+		res = AM_FinishCiaInstall(handle);
+	}
+
 	if (R_FAILED(res))
 	{
 		printf("Error finishing CIA install.\n");
@@ -318,7 +325,7 @@ int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output
 
 		char *url = malloc(48 + strlen(NUS_URL) + 1);
 		sprintf(url, "%s%s/%s", NUS_URL, title_id, content_id);
-		DownloadFile(url, output);
+		DownloadFile(url, output, true);
 		free(url);
 
 	}
@@ -406,8 +413,9 @@ int install_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, H
 	return 0;
 }
 
-int install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
+Result install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle)
 {
+	Result res = 0;
 	for(int i = 0; i < tmd_context.content_count; i++) {
 		char content_id[16];
 		char title_id[32];
@@ -416,10 +424,17 @@ int install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offse
 
 		char *url = malloc(48 + strlen(NUS_URL) + 1);
 		sprintf(url, "%s%s/%s", NUS_URL, title_id, content_id);
-		DownloadFileInstall(url, &handle, offset);
+
+		res = DownloadFileInstall(url, &handle, offset);
 		free(url);
+
+		if (R_FAILED(res))
+		{
+			break;
+		}
 	}
-	return 0;
+
+	return res;
 }
 
 void install_write_align_padding(Handle handle, u32* offset, size_t alignment)
