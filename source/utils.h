@@ -18,7 +18,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include <3ds.h>
 
-#define NUS_URL "http://10.0.0.249:8000/"
+#define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
 
 //MISC
 #ifdef __cplusplus
