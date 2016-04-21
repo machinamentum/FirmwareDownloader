@@ -300,6 +300,12 @@ int main()
 
         if (keys & KEY_Y)
         {
+            mkpath("/CIAngel/").c_str(), 0777);
+
+            if (FileExists("/CIAngel/encTitleKeys.bin")){
+                printf("File exists... we will overwrite it!\n");
+            }
+
             FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
             Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh);
             if (res != 0)
@@ -315,6 +321,8 @@ int main()
 
         if (keys & KEY_B)
         {
+
+            mkpath("/CIAngel/tickets/").c_str(), 0777);
 
             // we don't really need to get the version number from the TMD and inject it to the ticket, it is nice but not really needed, especially when just making a ticket
             // makecdncia warns about it but build a good cia, it doesn't stop a cia being legit (if we are building a legit cia) if the tmd version doesn't match the ticket version.
