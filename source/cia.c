@@ -43,6 +43,13 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	u64 titleId = get_title_id(tmd_context);
 	FS_MediaType dest = ((titleId >> 32) & 0x8010) != 0 ? MEDIATYPE_NAND : MEDIATYPE_SD;
 
+	// Make sure this isn't a N3DS only title being installed on an O3DS
+	u8 n3ds = false;
+	if(R_SUCCEEDED(APT_CheckNew3DS(&n3ds);) && !n3ds && ((titleId >> 28) & 0xF) == 2) {
+		printf("Title requires a N3DS.\n");
+		return -1;
+	}
+
 	res = AM_StartCiaInstall(dest, &handle);
 	if (R_FAILED(res))
 	{

@@ -59,9 +59,6 @@ Result ConvertToCIA(std::string dir, std::string titleId)
 
     chdir(cwd);
 
-    FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
-    if (!output) return -2;
-
     int result;
     if (bInstallMode)
     {
@@ -69,6 +66,9 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     }
     else
     {
+        FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
+        if (!output) return -2;
+
         result = generate_cia(tmd_context, tik_context, output);
         if(result != 0){
             remove((dir + "/" + titleId + ".cia").c_str());
@@ -153,7 +153,13 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     printf("Starting %s - %s\n", (bInstallMode ? "install" : "download"), titleId.c_str());
 
     mkpath((outputDir + "/tmp/").c_str(), 0777);
-    //if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
+
+    // Make sure the CIA doesn't already exist
+    if (!bInstallMode && FileExists(outputDir + "/" + titleId + ".cia"))
+    {
+        return 0;
+    }
+
     std::ofstream ofs;
 
     FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
