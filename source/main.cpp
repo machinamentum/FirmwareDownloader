@@ -230,6 +230,17 @@ std::istream& GetLine(std::istream& is, std::string& t)
     }
 }
 
+std::string ToHex(const std::string& s)
+{
+    std::ostringstream ret;
+    for (std::string::size_type i = 0; i < s.length(); ++i)
+    {
+        int z = s[i]&0xff;
+        ret << std::hex << std::setfill('0') << std::setw(2) << z;
+    }
+    return ret.str();
+}
+
 int main()
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
@@ -245,7 +256,8 @@ int main()
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
     printf("Press X to input a Key/ID pair and download CIA.\n");
-    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com");
+    printf("Press B to generate tickets from encTitleKeys.bin\n");
     printf("\n");
 
 
@@ -300,6 +312,71 @@ int main()
             printf("Downloaded OK!\n");
 
         }
+
+        if (keys & KEY_B)
+        {
+
+            // we don't really need to get the version number from the TMD and inject it to the ticket, it is nice but not really needed, especially when just making a ticket
+            // makecdncia warns about it but build a good cia, it doesn't stop a cia being legit (if we are building a legit cia) if the tmd version doesn't match the ticket version.
+            char titleVersion[2] = {0x00, 0x00};
+            int count = 0;
+            std::ifstream keyfile("/CIAngel/encTitleKeys.bin", std::ifstream::binary);
+            keyfile.seekg(0x10, std::ios::beg);
+            std::vector<char> buffer (0x20,0);
+
+            while(keyfile.read(buffer.data(), buffer.size()))
+            {
+                std::string titleId = "";
+                std::string encTitleKey = "";
+
+                for (u16 i=0x8; i<0x10; i++)
+                {
+                    titleId = titleId + buffer[i];
+                }
+                for (u16 i=0x10; i<0x20; i++)
+                {
+                    encTitleKey = encTitleKey + buffer[i];
+                }
+
+                titleId = ToHex(titleId);
+                encTitleKey = ToHex(encTitleKey);
+
+                printf("title id - %s\n", titleId.c_str());
+                printf("key - %s\n", encTitleKey.c_str());
+
+                count++;
+
+                CreateTicket(titleId, encTitleKey, titleVersion, "/CIAngel/tickets/" + titleId + ".tik");
+                
+
+                // **** my python code to port ****
+                // titleid = binascii.hexlify(block[0x8:0x10])
+                // key = binascii.hexlify(block[0x10:0x20])
+                // typecheck = titleid[4:8]
+                
+                // if arguments.all:
+                //     #skip updates
+                //     if (typecheck == '000e'):
+                //         continue
+                //     #skip system
+                //     if (int(typecheck,16) & 0x10):
+                //         continue
+                //     elif (typecheck == '8005'):
+                //         continue
+                //     elif (typecheck == '800f'):
+                //         continue
+                // if arguments.all or (titleid in titlelist):
+                //     processContent(titleid, key)
+
+
+
+            }
+            printf("%d tickets dumped to sd:/CIAngel/tickets/\n", count);
+            printf("Press START to exit.\n\n");
+
+        }
+
+        
 
         if (keys & KEY_START) break;
 
