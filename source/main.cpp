@@ -274,22 +274,26 @@ int main(int argc, const char* argv[])
     socInit(soc_sharedmem, soc_sharedmem_size);
     sslcInit(0);
     hidInit();
+    consoleInit(GFX_TOP, NULL);
 
     // Trigger svchax so we can install CIAs
     if(argc > 0) {
         svchax_init(true);
         if(!__ctr_svchax || !__ctr_svchax_srv) {
             printf("Failed to acquire kernel access. Install mode disabled.\n");
-            return -1;
         } else {
             bSvcHaxAvailable = true;
         }
+    }
+    else
+    {
+        // We are running as a CIA, consider us root
+        bSvcHaxAvailable = true;
     }
 
     amInit();
     AM_InitializeExternalTitleDatabase(false);
 
-    consoleInit(GFX_TOP, NULL);
     printf("CIAngel by cearp and Drakia\n\n");
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
