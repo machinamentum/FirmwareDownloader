@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 
+#include <3ds.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -157,8 +159,9 @@ typedef struct
 	u8 reserved[0x1ff8];
 } CIA_HEADER;
 
-//Main Function
+// Main Functions
 int generate_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output);
+int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context);
 
 //Processing Functions
 TIK_CONTEXT process_tik(FILE *tik);
@@ -174,6 +177,7 @@ u64 get_content_size(TMD_CONTEXT tmd_context);
 u64 read_content_size(TMD_CONTENT_CHUNK_STRUCT content_struct);
 u32 get_total_cert_size(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context);
 u32 get_content_id(TMD_CONTENT_CHUNK_STRUCT content_struct);
+u64 get_title_id(TMD_CONTEXT content_struct);
 
 //Writing functions
 int write_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output);
@@ -181,7 +185,14 @@ int write_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *out
 int write_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output);
 int write_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output);
 int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output);
-int write_content_data(FILE *content, u64 content_size, FILE *output);
+
+// Install functions
+int install_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+int install_cert_chain(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+int install_tik(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+int install_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+Result install_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, u32* offset, Handle handle);
+void install_write_align_padding(Handle handle, u32* offset, size_t alignment);
 
 //Get Struct Functions
 TIK_STRUCT get_tik_struct(u32 sig_size, FILE *tik);

@@ -22,7 +22,11 @@
 #include "cia.h"
 #include "data.h"
 
+#include "svchax/svchax.h"
+
 static const u16 top = 0x140;
+static bool bSvcHaxAvailable = false;
+static bool bInstallMode = false;
 
 bool FileExists (std::string name){
     struct stat buffer;
@@ -55,12 +59,20 @@ Result ConvertToCIA(std::string dir, std::string titleId)
 
     chdir(cwd);
 
-    FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
-    if (!output) return -2;
+    int result;
+    if (bInstallMode)
+    {
+        result = install_cia(tmd_context, tik_context);
+    }
+    else
+    {
+        FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
+        if (!output) return -2;
 
-    int result = generate_cia(tmd_context,tik_context,output);
-    if(result != 0){
-        remove((dir + "/" + titleId + ".cia").c_str());
+        result = generate_cia(tmd_context, tik_context, output);
+        if(result != 0){
+            remove((dir + "/" + titleId + ".cia").c_str());
+        }
     }
 
     return result;
@@ -111,7 +123,7 @@ char* parse_string(const std::string & s)
     return buffer;
 }
 
-Result CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
+void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
 {
     std::ofstream ofs;
 
@@ -138,21 +150,28 @@ Result CreateTicket(std::string titleId, std::string encTitleKey, char* titleVer
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string outputDir)
 {
-    printf("Starting - %s\n", titleId.c_str());
+    printf("Starting %s - %s\n", (bInstallMode ? "install" : "download"), titleId.c_str());
 
     mkpath((outputDir + "/tmp/").c_str(), 0777);
-    if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
+
+    // Make sure the CIA doesn't already exist
+    if (!bInstallMode && FileExists(outputDir + "/" + titleId + ".cia"))
+    {
+        return 0;
+    }
+
     std::ofstream ofs;
 
     FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
     if (!oh) return -1;
-    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh);
+    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
     fclose(oh);
     if (res != 0)
     {
         printf("Could not download TMD. Internet/Title ID is OK?\n");
         return res;
     }
+
     //read version
     std::ifstream tmdfs;
     tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
@@ -163,15 +182,20 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
 
-    printf("Now creating the CIA...");
+    printf("Now %s the CIA...\n", (bInstallMode ? "installing" : "creating"));
 
     res = ConvertToCIA(outputDir + "/tmp", titleId);
     if (res != 0)
     {
-        printf("Could not create the CIA.");
+        printf("Could not %s the CIA.\n", (bInstallMode ? "install" : "create"));
         return res;
     }
-    rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
+
+    if (!bInstallMode)
+    {
+        rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
+    }
+
     printf(" DONE!\n");
     printf("Enjoy the game :)\n");
 
@@ -241,7 +265,7 @@ std::string ToHex(const std::string& s)
     return ret.str();
 }
 
-int main()
+int main(int argc, const char* argv[])
 {
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     gfxInitDefault();
@@ -251,15 +275,30 @@ int main()
     sslcInit(0);
     hidInit();
 
+    // Trigger svchax so we can install CIAs
+    if(argc > 0) {
+        svchax_init(true);
+        if(!__ctr_svchax || !__ctr_svchax_srv) {
+            printf("Failed to acquire kernel access. Install mode disabled.\n");
+            return -1;
+        } else {
+            bSvcHaxAvailable = true;
+        }
+    }
+
+    amInit();
+    AM_InitializeExternalTitleDatabase(false);
+
     consoleInit(GFX_TOP, NULL);
-    printf("CIAngel by cearp\n\n");
+    printf("CIAngel by cearp and Drakia\n\n");
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
     printf("Press X to input a Key/ID pair and download CIA.\n");
-    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com");
+    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
     printf("Press B to generate tickets from encTitleKeys.bin\n");
-    printf("\n");
 
+    printf("Press R to switch to Install mode (EXPERIMENTAL!)\n");
+    printf("\n");
 
     HB_Keyboard sHBKB;
     touchPosition touch;
@@ -306,17 +345,39 @@ int main()
                 printf("File exists... we will overwrite it!\n");
             }
 
+            printf("Downloading encTitleKeys.bin...\n");
             FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
-            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh);
+            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh, true);
+            fclose(oh);
             if (res != 0)
             {
                 printf("Could not download file.\n");
-                fclose(oh);
-                return res;
             }
-            fclose(oh);
-            printf("Downloaded OK!\n");
+            else
+            {
+                printf("Downloaded OK!\n");
+            }
+        }
 
+        if (keys & KEY_R)
+        {
+            bInstallMode = !bInstallMode;
+            if (bInstallMode)
+            {
+                if (!bSvcHaxAvailable)
+                {
+                    printf("Kernel access not available. Can't enable Install Mode.\n");
+                    bInstallMode = false;
+                }
+                else
+                {
+                    printf("Switched to Install Mode. This is EXPERIMENTAL!\n");
+                }
+            }
+            else
+            {
+                printf("Switched to Create Mode.\n");
+            }
         }
 
         if (keys & KEY_B)
@@ -396,6 +457,8 @@ int main()
         gfxSwapBuffers();
         gspWaitForVBlank();
     }
+
+    amExit();
 
     gfxExit();
     hidExit();
