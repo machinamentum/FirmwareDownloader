@@ -25,7 +25,7 @@
 #include "svchax/svchax.h"
 
 static const u16 top = 0x140;
-static bool bSvcHaxAvailable = false;
+static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
 
 bool FileExists (std::string name){
@@ -267,29 +267,28 @@ std::string ToHex(const std::string& s)
 
 int main(int argc, const char* argv[])
 {
-    u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     gfxInitDefault();
+    consoleInit(GFX_TOP, NULL);
+
+    // Trigger svchax so we can install CIAs
+    if(argc > 0) {
+        svchax_init(true);
+        if(!__ctr_svchax || !__ctr_svchax_srv) {
+            bSvcHaxAvailable = false;
+            printf("Failed to acquire kernel access. Install mode disabled.\n");
+        }
+    }
+
+    u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     httpcInit(0);
     soc_sharedmem = (u32 *)memalign(0x1000, soc_sharedmem_size);
     socInit(soc_sharedmem, soc_sharedmem_size);
     sslcInit(0);
     hidInit();
 
-    // Trigger svchax so we can install CIAs
-    if(argc > 0) {
-        svchax_init(true);
-        if(!__ctr_svchax || !__ctr_svchax_srv) {
-            printf("Failed to acquire kernel access. Install mode disabled.\n");
-            return -1;
-        } else {
-            bSvcHaxAvailable = true;
-        }
-    }
-
     amInit();
     AM_InitializeExternalTitleDatabase(false);
 
-    consoleInit(GFX_TOP, NULL);
     printf("CIAngel by cearp and Drakia\n\n");
     printf("Press Start to exit\n");
     printf("Press A to read data from SD and download CIA.\n");
@@ -297,7 +296,11 @@ int main(int argc, const char* argv[])
     printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
     printf("Press B to generate tickets from encTitleKeys.bin\n");
 
-    printf("Press R to switch to Install mode (EXPERIMENTAL!)\n");
+    // Only print install mode if svchax is available
+    if (bSvcHaxAvailable)
+    {
+        printf("Press R to switch to Install mode (EXPERIMENTAL!)\n");
+    }
     printf("\n");
 
     HB_Keyboard sHBKB;
