@@ -348,6 +348,7 @@ int main(int argc, const char* argv[])
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
+    /* Sadly svchax crashes too much, so only allow install mode when running as a CIA
     // Trigger svchax so we can install CIAs
     if(argc > 0) {
         svchax_init(true);
@@ -355,6 +356,13 @@ int main(int argc, const char* argv[])
             bSvcHaxAvailable = false;
             printf("Failed to acquire kernel access. Install mode disabled.\n");
         }
+    }
+    */
+    
+    // argc is 0 when running as a CIA, and 1 when running as a 3dsx
+    if (argc > 0)
+    {
+        bSvcHaxAvailable = false;
     }
 
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
