@@ -443,7 +443,7 @@ int main(int argc, const char* argv[])
             std::string searchstring = getInput(&sHBKB);
 
             std::vector<display_item> display_output;
-            std::ifstream ifs("wings.json");
+            std::ifstream ifs("/CIAngel/wings.json");
             Json::Reader reader;
             Json::Value obj;
             reader.parse(ifs, obj);
