@@ -10,6 +10,12 @@
 #include <dirent.h>
 #include <malloc.h>
 
+#include <typeinfo>
+#include <cmath>
+#include <numeric>
+#include <iterator>
+#include <algorithm>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -23,10 +29,23 @@
 #include "data.h"
 
 #include "svchax/svchax.h"
+#include "json/json.h"
 
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
+
+
+struct display_item {
+  int ld;
+  int index;
+};
+
+bool compareByLD(const display_item &a, const display_item &b)
+{
+    return a.ld < b.ld;
+}
+
 
 bool FileExists (std::string name){
     struct stat buffer;
@@ -265,6 +284,37 @@ std::string ToHex(const std::string& s)
     return ret.str();
 }
 
+int levenshtein_distance(const std::string &s1, const std::string &s2)
+{
+    // To change the type this function manipulates and returns, change
+    // the return type and the types of the two variables below.
+    int s1len = s1.size();
+    int s2len = s2.size();
+    
+    auto column_start = (decltype(s1len))1;
+    
+    auto column = new decltype(s1len)[s1len + 1];
+    std::iota(column + column_start, column + s1len + 1, column_start);
+    
+    for (auto x = column_start; x <= s2len; x++) {
+        column[0] = x;
+        auto last_diagonal = x - column_start;
+        for (auto y = column_start; y <= s1len; y++) {
+            auto old_diagonal = column[y];
+            auto possibilities = {
+                column[y] + 1,
+                column[y - 1] + 1,
+                last_diagonal + (s1[y - 1] == s2[x - 1]? 0 : 1)
+            };
+            column[y] = std::min(possibilities);
+            last_diagonal = old_diagonal;
+        }
+    }
+    auto result = column[s1len];
+    delete[] column;
+    return result;
+}
+
 int main(int argc, const char* argv[])
 {
     gfxInitDefault();
@@ -290,17 +340,19 @@ int main(int argc, const char* argv[])
     AM_InitializeExternalTitleDatabase(false);
 
     printf("CIAngel by cearp and Drakia\n\n");
-    printf("Press Start to exit\n");
-    printf("Press A to read data from SD and download CIA.\n");
-    printf("Press X to input a Key/ID pair and download CIA.\n");
-    printf("Press Y = dl encTitleKeys.bin from 3ds.nfshost.com\n");
-    printf("Press B to generate tickets from encTitleKeys.bin\n");
+    printf("A - Read data from SD and download CIA\n");
+    printf("X - Type a Key/ID pair and download CIA\n");
+    printf("Y - Dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("B - Generate tickets from encTitleKeys.bin\n");
+    printf("L - Type name and download/install CIA\n");
 
     // Only print install mode if svchax is available
     if (bSvcHaxAvailable)
     {
-        printf("Press R to switch to Install mode (EXPERIMENTAL!)\n");
+        printf("R - Switch to 'Install' mode (EXPERIMENTAL!)\n");
     }
+
+    printf("START - Exit\n");
     printf("\n");
 
     HB_Keyboard sHBKB;
@@ -334,7 +386,8 @@ int main(int argc, const char* argv[])
             if (titleId.length() == 16 && key.length() == 32)
             {
                 DownloadTitle(titleId, key, "/CIAngel");
-            } else
+            }
+            else
             {
                 printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\nPress X to try again, or Start to exit.\n");
             }
@@ -381,6 +434,76 @@ int main(int argc, const char* argv[])
             {
                 printf("Switched to Create Mode.\n");
             }
+        }
+
+
+        if (keys & KEY_L)
+        {
+            printf("Please enter text to search for the name:\n");
+            std::string searchstring = getInput(&sHBKB);
+
+            std::vector<display_item> display_output;
+            std::ifstream ifs("wings.json");
+            Json::Reader reader;
+            Json::Value obj;
+            reader.parse(ifs, obj);
+            const Json::Value& characters = obj; // array of characters
+            for (int i = 0; i < characters.size(); i++){
+                std::string temp;
+                temp = characters[i]["name"].asString();
+
+                int ld = levenshtein_distance(temp, searchstring);
+                if (ld < 10)
+                {
+                    display_item item;
+                    item.ld = ld;
+                    item.index = i;
+                    display_output.push_back(item);
+                }
+
+            }
+
+            // sort similar names by levenshtein distance
+            std::sort(display_output.begin(), display_output.end(), compareByLD);
+
+            // print a max of 6 most 'similar' names. if X items, vector size is X (not X-1)
+            int display_amount = 6; 
+            if ( display_output.size() < display_amount )
+            {
+                display_amount = display_output.size();
+            }
+
+            for(int i=0; i < display_amount; i++){
+                printf( "%d - %s\n", i+1, characters[display_output[i].index]["name"].asString().c_str() );
+                printf( "    %s - ", characters[display_output[i].index]["region"].asString().c_str() );
+                printf( "%s\n", characters[display_output[i].index]["code"].asString().c_str() );
+            }
+
+
+            printf("Please enter number of game to download:\n");
+            std::string selectednumstring = getInput(&sHBKB);
+            
+            int selectednum;
+            std::stringstream(selectednumstring) >> selectednum;
+            selectednum--;
+
+            std::string selected_titleid = characters[display_output[selectednum].index]["titleid"].asString();
+            std::string selected_enckey = characters[display_output[selectednum].index]["enckey"].asString();
+            std::string selected_name = characters[display_output[selectednum].index]["name"].asString();
+            
+            printf("OK - %s\n", selected_name.c_str());
+
+            DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
+            
+            printf("Press START to exit.\n\n");
+
+
+
+
+
+
+
+       
         }
 
         if (keys & KEY_B)
