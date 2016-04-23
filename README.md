@@ -1,5 +1,11 @@
 # CIAngel
 
+**Place wings.json file in sd:/CIAngel/ - in CIAngel, press L to enter search mode, type name of game, then select the result's number you want**
+
+wings.json file can be found here - https://mega.nz/#!n4onnDQJ!vPkF3HCyWgkRyj-hgpb5vcpX9CE37GaglXZaImPM2gY
+It's early and experiemental at the moment, this will be improved.
+-----------------------------
+
 Now we can build CIAs on the 3DS!
 Using a Title ID and an encrypted title key, a GOOD CIAs will be produced that can be redownloaded from eshop and updated from eshop if new content comes out. These CIAs will not interfere with content from eshop.
 
