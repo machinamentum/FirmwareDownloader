@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include "lib.h"
+#include "utils.h"
 
 //MISC
 void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
@@ -110,11 +111,48 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool)
 }
 
 //IO Related
+void PrintProgress(u32 nSize, u32 nCurrent)
+{
+	// Don't attempt to calculate anything if we don't have a final size
+	if (nSize == 0) return;
+	
+	// Calculate percent and bar width
+	double fPercent = ((double)nCurrent / nSize) * 100.0;
+	u16 barDrawWidth = (fPercent / 100) * 40;
+
+	int i = 0;
+	printf("% 3.2f%% ", fPercent);
+	for (i = 0; i < barDrawWidth; i++)
+	{
+		printf("|");
+	}
+	printf("\r");
+
+	// Make sure the screen updates
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+    gspWaitForVBlank();
+}
+
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output)
 {
 	fseek_64(output,offset,SEEK_SET);
 	fwrite(buffer,size,1,output);
 } 
+
+void write_align_padding(FILE *output, size_t alignment)
+{
+	long int pos = ftell(output);
+	long int usedbytes = pos & (alignment - 1);
+	if (usedbytes)
+	{
+		long int padbytes = (alignment - usedbytes);
+		char* pad = (char*)malloc(padbytes);
+		memset(pad, 0, padbytes);
+		fwrite(pad, padbytes, 1, output);
+		free(pad);
+	}
+}
 
 u64 GetFileSize_u64(char *filename)
 {
@@ -189,6 +227,97 @@ return _getcwd(buffer,maxlen);
 #else
 return getcwd(buffer,maxlen);
 #endif
+}
+
+void DownloadFile_InternalSave(void* out, unsigned char* buffer, u32 readSize)
+{
+	FILE* os = (FILE*)out;
+	fwrite(buffer, readSize, 1, os);
+}
+
+static u32 install_offset = 0;
+void DownloadFile_InternalInstall(void* out, unsigned char* buffer, u32 readSize)
+{
+	u32 bytesWritten;
+	Handle* handle = (Handle*)out;
+
+	FSFILE_Write(*handle, &bytesWritten, install_offset, buffer, readSize, 0);
+
+	install_offset += bytesWritten;
+}
+
+Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
+							 void (*write)(void* out, unsigned char* buffer, u32 readSize))
+{
+    httpcContext context;
+    u32 fileSize = 0;
+    u32 procSize = 0;
+    Result ret = 0;
+    Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
+    u32 status;
+    u32 bufSize = 0x100000;
+    u32 readSize = 0;
+    httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
+
+    ret = httpcBeginRequest(&context);
+    if (ret != 0) goto _out;
+
+    ret = httpcGetResponseStatusCode(&context, &status, 0);
+    if (ret != 0) goto _out;
+
+    if (status != 200)
+    {
+        ret = status;
+        goto _out;
+    }
+
+    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
+    if (ret != 0) goto _out;
+
+    {
+        unsigned char *buffer = (unsigned char *)linearAlloc(bufSize);
+        if (buffer == NULL)
+        {
+            printf("Error allocating download buffer\n");
+            ret = -1;
+            goto _out;
+        }
+
+        while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
+        {
+            memset(buffer, 0, bufSize);
+
+            dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
+            write(out, buffer, readSize);
+
+            procSize += readSize;
+            if (bProgress)
+            {
+            	PrintProgress(fileSize, procSize);
+            }
+        }
+        printf("\n");
+        linearFree(buffer);
+    }
+_out:
+    httpcCloseContext(&context);
+
+    return ret;
+}
+
+
+Result DownloadFile(const char *url, FILE *os, bool bProgress)
+{
+	return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
+}
+
+
+Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
+{
+	install_offset = *offset;
+	Result res = DownloadFile_Internal(url, handle, true, DownloadFile_InternalInstall);
+	*offset = install_offset;
+	return res;
 }
 
 //Data Size conversion
