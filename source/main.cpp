@@ -274,11 +274,8 @@ void PrintMenu(bool bClear)
     }
     
     printf("\n");
-    printf("A - Read data from SD and download CIA\n");
     printf("X - Type a Key/ID pair and download CIA\n");
-    printf("Y - Dl encTitleKeys.bin from 3ds.nfshost.com\n");
-    printf("B - Generate tickets from encTitleKeys.bin\n");
-    printf("L - Type name and download/install CIA\n");
+    printf("Y - Type name and download/install CIA\n");
 
     // Only print install mode if svchax is available
     if (bSvcHaxAvailable)
@@ -401,19 +398,6 @@ int main(int argc, const char* argv[])
 
         u32 keys = hidKeysDown();
 
-        if (keys & KEY_A)
-        {
-            std::ifstream input;
-            std::string titleId;
-            std::string key;
-            input.open("/CIAngel/input.txt", std::ofstream::in);
-            GetLine(input, titleId);
-            GetLine(input, key);
-            DownloadTitle(titleId, key, "/CIAngel");
-            
-            PrintMenu(false);
-        }
-
         if (keys & KEY_X)
         {
             printf("Please enter a titleID:\n");
@@ -445,52 +429,8 @@ int main(int argc, const char* argv[])
             }
         }
 
+
         if (keys & KEY_Y)
-        {
-            mkpath("/CIAngel/", 0777);
-
-            if (FileExists("/CIAngel/encTitleKeys.bin")){
-                printf("File exists... we will overwrite it!\n");
-            }
-
-            printf("Downloading encTitleKeys.bin...\n");
-            FILE *oh = fopen("/CIAngel/encTitleKeys.bin", "wb");
-            Result res = DownloadFile("http://3ds.nfshost.com/downloadenc", oh, true);
-            fclose(oh);
-            if (res != 0)
-            {
-                printf("Could not download file.\n");
-            }
-            else
-            {
-                printf("Downloaded OK!\n");
-                PrintMenu(false);
-            }
-        }
-
-        if (keys & KEY_R)
-        {
-            bInstallMode = !bInstallMode;
-            if (bInstallMode)
-            {
-                if (!bSvcHaxAvailable)
-                {
-                    printf("Kernel access not available. Can't enable Install Mode.\n");
-                    bInstallMode = false;
-                }
-                else
-                {
-                    printf("Switched to Install Mode. This is EXPERIMENTAL!\n");
-                }
-            }
-            else
-            {
-                printf("Switched to Create Mode.\n");
-            }
-        }
-
-
-        if (keys & KEY_L)
         {
             printf("Please enter text to search for the name:\n");
             std::string searchstring = getInput(&sHBKB, bKBCancelled);
@@ -588,72 +528,26 @@ int main(int argc, const char* argv[])
             PrintMenu(false);
         }
 
-        if (keys & KEY_B)
+        if (keys & KEY_R)
         {
-
-            mkpath("/CIAngel/tickets/", 0777);
-
-            // we don't really need to get the version number from the TMD and inject it to the ticket, it is nice but not really needed, especially when just making a ticket
-            // makecdncia warns about it but build a good cia, it doesn't stop a cia being legit (if we are building a legit cia) if the tmd version doesn't match the ticket version.
-            char titleVersion[2] = {0x00, 0x00};
-            int count = 0;
-            std::ifstream keyfile("/CIAngel/encTitleKeys.bin", std::ifstream::binary);
-            keyfile.seekg(0x10, std::ios::beg);
-            std::vector<char> buffer (0x20,0);
-
-            while(keyfile.read(buffer.data(), buffer.size()))
+            bInstallMode = !bInstallMode;
+            if (bInstallMode)
             {
-                std::string titleId = "";
-                std::string encTitleKey = "";
-
-                for (u16 i=0x8; i<0x10; i++)
+                if (!bSvcHaxAvailable)
                 {
-                    titleId = titleId + buffer[i];
+                    printf("Kernel access not available. Can't enable Install Mode.\n");
+                    bInstallMode = false;
                 }
-                for (u16 i=0x10; i<0x20; i++)
+                else
                 {
-                    encTitleKey = encTitleKey + buffer[i];
+                    printf("Switched to Install Mode. This is EXPERIMENTAL!\n");
                 }
-
-                titleId = ToHex(titleId);
-                encTitleKey = ToHex(encTitleKey);
-
-                printf("title id - %s\n", titleId.c_str());
-                printf("key - %s\n", encTitleKey.c_str());
-
-                count++;
-
-                CreateTicket(titleId, encTitleKey, titleVersion, "/CIAngel/tickets/" + titleId + ".tik");
-                
-
-                // **** my python code to port ****
-                // titleid = binascii.hexlify(block[0x8:0x10])
-                // key = binascii.hexlify(block[0x10:0x20])
-                // typecheck = titleid[4:8]
-                
-                // if arguments.all:
-                //     #skip updates
-                //     if (typecheck == '000e'):
-                //         continue
-                //     #skip system
-                //     if (int(typecheck,16) & 0x10):
-                //         continue
-                //     elif (typecheck == '8005'):
-                //         continue
-                //     elif (typecheck == '800f'):
-                //         continue
-                // if arguments.all or (titleid in titlelist):
-                //     processContent(titleid, key)
-
-
-
             }
-            printf("%d tickets dumped to sd:/CIAngel/tickets/\n", count);
-            PrintMenu(false);
-
-        }
-
-        
+            else
+            {
+                printf("Switched to Create Mode.\n");
+            }
+        }    
 
         if (keys & KEY_START) break;
 
