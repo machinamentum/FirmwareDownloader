@@ -466,7 +466,7 @@ int main(int argc, const char* argv[])
             std::sort(display_output.begin(), display_output.end(), compareByLD);
 
             // print a max of 6 most 'similar' names. if X items, vector size is X (not X-1)
-            unsigned int display_amount = 6; 
+            unsigned int display_amount = 13; 
             if ( display_output.size() < display_amount )
             {
                 display_amount = display_output.size();
