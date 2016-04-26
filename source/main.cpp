@@ -511,19 +511,19 @@ void action_toggle_install()
 void action_toggle_region()
 {
     consoleClear();
-	if(regionFilter == "off") {
-		regionFilter = "ALL";
-	} else if (regionFilter == "ALL") {
-		regionFilter = "EUR";
-	} else if (regionFilter == "EUR") {
-		regionFilter = "USA";
-	} else if (regionFilter == "USA") {
-		regionFilter = "JPN";
-	} else if (regionFilter == "JPN") {
-		regionFilter = "---";
-	} else if (regionFilter == "---") {
-		regionFilter = "off";
-	}
+    if(regionFilter == "off") {
+        regionFilter = "ALL";
+    } else if (regionFilter == "ALL") {
+        regionFilter = "EUR";
+    } else if (regionFilter == "EUR") {
+        regionFilter = "USA";
+    } else if (regionFilter == "USA") {
+        regionFilter = "JPN";
+    } else if (regionFilter == "JPN") {
+        regionFilter = "---";
+    } else if (regionFilter == "---") {
+        regionFilter = "off";
+    }
 }
 
 void action_about()
@@ -542,7 +542,7 @@ void menu_main()
 {
     const char *options[] = {
         "Search for a title by name",
-        "Filter by region",
+        "Enable region filter for search",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",
         "Toggle 'Install' mode (EXPERIMENTAL!)",
