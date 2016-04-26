@@ -36,6 +36,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
+static std::string regionFilter = "off";
 
 std::string upper(std::string s)
 {
@@ -369,14 +370,15 @@ void action_search()
         temp = characters[i]["name"].asString();
 
         int ld = levenshtein_distance(upper(temp), upper(searchstring));
-        if (ld < 10)
-        {
-            display_item item;
-            item.ld = ld;
-            item.index = i;
-            display_output.push_back(item);
-        }
-
+	if(temp.find("-System") == std::string::npos &&  (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) {
+		if (ld < 10)
+		{
+		    display_item item;
+		    item.ld = ld;
+		    item.index = i;
+		    display_output.push_back(item);
+		}
+	}
     }
 
     // sort similar names by levenshtein distance
@@ -506,6 +508,24 @@ void action_toggle_install()
     }
 }
 
+void action_toggle_region()
+{
+    consoleClear();
+	if(regionFilter == "off") {
+		regionFilter = "ALL";
+	} else if (regionFilter == "ALL") {
+		regionFilter = "EUR";
+	} else if (regionFilter == "EUR") {
+		regionFilter = "USA";
+	} else if (regionFilter == "USA") {
+		regionFilter = "JPN";
+	} else if (regionFilter == "JPN") {
+		regionFilter = "---";
+	} else if (regionFilter == "---") {
+		regionFilter = "off";
+	}
+}
+
 void action_about()
 {
     consoleClear();
@@ -522,6 +542,7 @@ void menu_main()
 {
     const char *options[] = {
         "Search for a title by name",
+        "Filter by region",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",
         "Toggle 'Install' mode (EXPERIMENTAL!)",
@@ -533,7 +554,7 @@ void menu_main()
     while (true)
     {
         // We have to update the footer every draw, incase the user switches install mode
-        sprintf(footer, "%s Mode%s", (bInstallMode ? "Install" : "Download"), (bInstallMode ? " (EXPERIMENTAL!)" : ""));
+        sprintf(footer, "%s Mode%s Region:%s", (bInstallMode ? "Install" : "Download"), (bInstallMode ? " (EXPERIMENTAL!)" : ""), regionFilter.c_str());
 
         int result = menu_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options);
 
@@ -543,18 +564,21 @@ void menu_main()
                 action_search();
             break;
             case 1:
-                action_manual_entry();
+                action_toggle_region();
             break;
             case 2:
-                action_input_txt();
+                action_manual_entry();
             break;
             case 3:
-                action_toggle_install();
+                action_input_txt();
             break;
             case 4:
-                action_about();
+                action_toggle_install();
             break;
             case 5:
+                action_about();
+            break;
+            case 6:
                 return;
             break;
         }
