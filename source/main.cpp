@@ -564,7 +564,7 @@ void menu_main()
         "About CIAngel",
         "Exit"
     };
-    char footer[31];
+    char footer[42];
 
     while (true)
     {
