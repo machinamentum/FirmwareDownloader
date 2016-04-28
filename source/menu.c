@@ -49,7 +49,9 @@ void menu_draw_string_full(const char* str, int pos_y, const char* color)
     gfxFlushBuffers();
 }
 
-int menu_draw(const char *title, const char* footer, int back, int count, const char *options[])
+void menu_multkey_draw(const char *title, const char* footer, int back, int count, const char *options[], void* data,
+                      bool (*callback)(int result, u32 key, void* data))
+
 {
     int selected = 0;
 
@@ -67,6 +69,7 @@ int menu_draw(const char *title, const char* footer, int back, int count, const 
     // Draw the menu
     pos_y_text[0] = current_pos_y;
     menu_draw_string(options[0], 1, current_pos_y++, CONSOLE_REVERSE);
+
     // Don't allow the menu to draw beyond the edge of the screen, just truncate if so
     for (int i = 1; i < count && i < (currentMenu.menuConsole.consoleHeight - 2); i++) {
         pos_y_text[i] = current_pos_y;
@@ -117,18 +120,13 @@ int menu_draw(const char *title, const char* footer, int back, int count, const 
             if (current < 0) current = 0;
 
             menu_draw_string(options[current], 1, pos_y_text[current], CONSOLE_REVERSE);
-        } else if (key & KEY_A) {
-            selected = current;
-            break;
-        } else if ((key & KEY_B) && back) {
-            selected = -1;
+        } else if (callback(current, key, data)) {
             break;
         }
     }
 
     // Reselect the original console
     consoleSelect(currentConsole);
-    return selected;
 }
 
 int *menu_draw_selection(const char *title, int count, const char *options[], const int *preselected)
