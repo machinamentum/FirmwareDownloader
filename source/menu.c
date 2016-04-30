@@ -53,8 +53,6 @@ void menu_multkey_draw(const char *title, const char* footer, int back, int coun
                       bool (*callback)(int result, u32 key, void* data))
 
 {
-    int selected = 0;
-
     // Select our menu console and clear the screen
     PrintConsole* currentConsole = consoleSelect(&currentMenu.menuConsole);
     consoleClear();
@@ -85,6 +83,11 @@ void menu_multkey_draw(const char *title, const char* footer, int back, int coun
 
     while (true) {
         u32 key = wait_key();
+
+        // If key is 0, it means aptMainLoop() returned false
+        if (!key) {
+            break;
+        }
         
         if (key & KEY_UP) {
             menu_draw_string(options[current], 1, pos_y_text[current], CONSOLE_WHITE);

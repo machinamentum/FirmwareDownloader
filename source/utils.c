@@ -464,7 +464,7 @@ void memdump(FILE* fout, const char* prefix, const u8* data, u32 size)
 // HID related
 u32 wait_key()
 {
-    while (true)
+    while (aptMainLoop())
     {
         hidScanInput();
 
@@ -476,6 +476,8 @@ u32 wait_key()
         gfxFlushBuffers();
         gspWaitForVBlank();
     }
+
+    return 0;
 }
 
 u32 wait_key_specific(const char* message, u32 key)

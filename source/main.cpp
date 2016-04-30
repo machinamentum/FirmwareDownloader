@@ -63,6 +63,14 @@ typedef struct {
   std::string code;
 } game_item;
 
+struct find_game_item {
+    std::string titleid;
+    find_game_item(std::string titleid) : titleid(titleid) {}
+    bool operator () ( const game_item& gi ) const {
+        return gi.titleid == titleid;
+    }
+};
+
 // Vector used for download queue
 std::vector<game_item> game_queue;
 
@@ -76,7 +84,7 @@ bool FileExists (std::string name){
     return (stat (name.c_str(), &buffer) == 0);
 }
 
-Result ConvertToCIA(std::string dir, std::string titleId)
+Result ConvertToCIA(std::string dir, std::string titleName)
 {
     char cwd[1024];
     if (getcwdir(cwd, sizeof(cwd)) == NULL){
@@ -109,12 +117,12 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     }
     else
     {
-        FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
+        FILE *output = fopen((dir + "/" + titleName + ".cia").c_str(),"wb");
         if (!output) return -2;
 
         result = generate_cia(tmd_context, tik_context, output);
         if(result != 0){
-            remove((dir + "/" + titleId + ".cia").c_str());
+            remove((dir + "/" + titleName + ".cia").c_str());
         }
     }
 
@@ -191,8 +199,15 @@ void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersi
     ofs.close();
 }
 
-Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string outputDir)
+Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName)
 {
+    std::string outputDir = "/CIAngel";
+
+    if (titleName.length() == 0)
+    {
+        titleName = titleId;
+    }
+
     std::string mode_text;
     if(selected_mode == make_cia){
         mode_text = "creating";
@@ -202,21 +217,25 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     }
 
 
-    printf("Starting - %s\n", titleId.c_str());
+    printf("Starting - %s\n", titleName.c_str());
 
     mkpath((outputDir + "/tmp/").c_str(), 0777);
 
     // Make sure the CIA doesn't already exist
-    if ( (selected_mode == make_cia) && FileExists(outputDir + "/" + titleId + ".cia"))
+    if ( (selected_mode == make_cia) && FileExists(outputDir + "/" + titleName + ".cia"))
     {
-        printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleId.c_str());
+        printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
         return 0;
     }
 
     std::ofstream ofs;
 
     FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
-    if (!oh) return -1;
+    if (!oh) 
+    {
+        printf("Error opening %s/tmp/tmd\n", outputDir.c_str());
+        return -1;
+    }
     Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
     fclose(oh);
     if (res != 0)
@@ -237,24 +256,54 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     printf("Now %s the CIA...\n", mode_text.c_str());
 
-    res = ConvertToCIA(outputDir + "/tmp", titleId);
+    res = ConvertToCIA(outputDir + "/tmp", titleName);
     if (res != 0)
     {
         printf("Could not %s the CIA.\n", mode_text.c_str());
         return res;
     }
 
-    if(selected_mode == make_cia)
+    if (selected_mode == make_cia)
     {
-        rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
+        rename((outputDir + "/tmp/" + titleName + ".cia").c_str(), (outputDir + "/" + titleName + ".cia").c_str());
     }
 
     printf(" DONE!\n");
-    printf("Enjoy the game :)\n");
 
     // TODO remove tmp dir
 
     return res;
+}
+
+void ProcessGameQueue()
+{
+    // Create the tickets folder if we're in ticket mode
+    char empty_titleVersion[2] = {0x00, 0x00};
+    if (selected_mode == install_ticket)
+    {
+        mkpath("/CIAngel/tickets/", 0777); 
+    }
+
+    std::vector<game_item>::iterator game = game_queue.begin();
+    while(game != game_queue.end())
+    {
+        std::string selected_titleid = (*game).titleid;
+        std::string selected_enckey = (*game).titlekey;
+        std::string selected_name = (*game).name;
+
+        if (selected_mode == install_ticket)
+        {
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik"); 
+        }
+        else
+        {
+            DownloadTitle(selected_titleid, selected_enckey, selected_name);
+        }
+
+        game = game_queue.erase(game);
+    }
+
+    wait_key_specific("Press A to continue.\n", KEY_A);
 }
 
 std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
@@ -406,10 +455,32 @@ bool menu_search_keypress(int selected, u32 key, void* data)
             CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik"); 
         }
         else{
-            DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
+            DownloadTitle(selected_titleid, selected_enckey, selected_name);
         }
 
         wait_key_specific("\nPress A to continue.\n", KEY_A);
+        return true;
+    }
+
+    // X triggers adding items to the download queue
+    if (key & KEY_X)
+    {
+        consoleClear();
+        std::string titleid = (*cb_data)[selected].titleid;
+        if (std::find_if(game_queue.begin(), game_queue.end(), find_game_item(titleid)) == game_queue.end())
+        {
+            game_queue.push_back((*cb_data)[selected]);
+
+            printf("Game added to queue.\n");
+        }
+        else
+        {
+            printf("Game already in queue.\n");
+        }
+
+        printf("Queue size: %d\n", game_queue.size());
+        wait_key_specific("\nPress A to continue.\n", KEY_A);
+
         return true;
     }
 
@@ -501,7 +572,7 @@ void action_search()
     }
 
     char footer[51];
-    sprintf(footer, "Press A to %s. Press B to return.", mode_text.c_str());
+    sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
 
     menu_multkey_draw("Select a Title", footer, 1, sizeof(results) / sizeof(char*), (const char**)results, &display_output, menu_search_keypress);
 
@@ -510,6 +581,49 @@ void action_search()
     {
         free(results[i]);
     }
+}
+
+void action_prompt_queue()
+{
+    consoleClear();
+
+    std::string mode_text;
+    if(selected_mode == make_cia) {
+        mode_text = "download";
+    }
+    else if (selected_mode == install_direct) {
+        mode_text = "install";
+    }
+    else if (selected_mode == install_ticket) {
+        mode_text = "create tickets for";
+    }
+
+    printf("Queue contains %d items.\n", game_queue.size());
+    printf("Press A to %s queue.\n", mode_text.c_str());
+    printf("Press B to return to menu.\n");
+    printf("Press X to clear queue.\n");
+
+    while (aptMainLoop())
+    {
+        u32 key = wait_key();
+        if (key & KEY_B)
+        {
+            break;
+        }
+
+        if (key & KEY_X)
+        {
+            game_queue.clear();
+            break;
+        }
+
+        if (key & KEY_A)
+        {
+            ProcessGameQueue();
+            break;
+        }
+    }
+
 }
 
 void action_manual_entry()
@@ -538,7 +652,7 @@ void action_manual_entry()
 
         if (titleId.length() == 16 && key.length() == 32)
         {
-            DownloadTitle(titleId, key, "/CIAngel");
+            DownloadTitle(titleId, key, "");
             wait_key_specific("\nPress A to continue.\n", KEY_A);
             break;
         }
@@ -560,7 +674,7 @@ void action_input_txt()
     input.open("/CIAngel/input.txt", std::ofstream::in);
     GetLine(input, titleId);
     GetLine(input, key);
-    DownloadTitle(titleId, key, "/CIAngel");
+    DownloadTitle(titleId, key, "");
 
     wait_key_specific("\nPress A to continue.\n", KEY_A);
 }
@@ -634,28 +748,31 @@ bool menu_main_keypress(int selected, u32 key, void*)
                 action_search();
             break;
             case 1:
-                action_manual_entry();
+                action_prompt_queue();
             break;
             case 2:
-                action_input_txt();
+                action_manual_entry();
             break;
             case 3:
-                action_about();
+                action_input_txt();
             break;
             case 4:
+                action_about();
+            break;
+            case 5:
                 action_exit();
             break;
         }
         return true;
     }
-    // R button triggers mode toggle
-    else if (key & KEY_R)
+    // L button triggers mode toggle
+    else if (key & KEY_L)
     {
         action_toggle_install();
         return true;
     }
-    // L button triggers region toggle
-    else if (key & KEY_L)
+    // R button triggers region toggle
+    else if (key & KEY_R)
     {
         action_toggle_region();
         return true;
@@ -669,6 +786,7 @@ void menu_main()
 {
     const char *options[] = {
         "Search for a title by name",
+        "Process download queue",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",
         "About CIAngel",
@@ -690,7 +808,7 @@ void menu_main()
         }
 
         // We have to update the footer every draw, incase the user switches install mode or region
-        sprintf(footer, "Mode (R):%s Region (L):%s", mode_text.c_str(), regionFilter.c_str());
+        sprintf(footer, "Mode (L):%s Region (R):%s Queue: %d", mode_text.c_str(), regionFilter.c_str(), game_queue.size());
 
         menu_multkey_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options, NULL, menu_main_keypress);
 
