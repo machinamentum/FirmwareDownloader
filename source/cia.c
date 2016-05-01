@@ -28,12 +28,13 @@ int generate_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 	write_cert_chain(tmd_context,tik_context,output);
 	write_tik(tmd_context,tik_context,output);
 	write_tmd(tmd_context,tik_context,output);
-	write_content(tmd_context,tik_context,output);
+	Result res = write_content(tmd_context,tik_context,output);
 	fclose(output);
 	fclose(tik_context.tik);
 	fclose(tmd_context.tmd);
 	free(tmd_context.content_struct);
-	return 0;
+	
+	return res;
 }
 
 int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
@@ -327,6 +328,7 @@ int write_tmd(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 
 int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output)
 {
+	Result res = 0;
 	for(int i = 0; i < tmd_context.content_count; i++) {
 		printf("Downloading content %d of %d\n", i + 1, tmd_context.content_count);
 		char content_id[16];
@@ -336,11 +338,16 @@ int write_content(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context, FILE *output
 
 		char *url = malloc(48 + strlen(NUS_URL) + 1);
 		sprintf(url, "%s%s/%s", NUS_URL, title_id, content_id);
-		DownloadFile(url, output, true);
+		res = DownloadFile(url, output, true);
 		free(url);
 
+		if (R_FAILED(res))
+		{
+			break;
+		}
+
 	}
-	return 0;
+	return res;
 }
 
 

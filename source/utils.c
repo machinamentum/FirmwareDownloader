@@ -17,7 +17,6 @@ You should have received a copy of the GNU General Public License
 along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 **/
 #include "lib.h"
-#include "utils.h"
 
 //MISC
 void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
@@ -284,6 +283,12 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
 
         while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
         {
+        	// Check if the app is closing
+        	if (!aptMainLoop()) {
+        		ret = -1;
+        		break;
+        	}
+
             memset(buffer, 0, bufSize);
 
             dlret = httpcDownloadData(&context, buffer, bufSize, &readSize);
@@ -295,6 +300,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
             	PrintProgress(fileSize, procSize);
             }
         }
+
         printf("\n");
         linearFree(buffer);
     }
@@ -322,7 +328,7 @@ Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
 //Data Size conversion
 u16 u8_to_u16(u8 *value, u8 endianness)
 {
-	u16 new_value;
+	u16 new_value = 0;
 	switch(endianness){
 		case(BIG_ENDIAN): new_value =  (value[1]<<0) | (value[0]<<8); break;
 		case(LITTLE_ENDIAN): new_value = (value[0]<<0) | (value[1]<<8); break;
@@ -332,7 +338,7 @@ u16 u8_to_u16(u8 *value, u8 endianness)
 
 u32 u8_to_u32(u8 *value, u8 endianness)
 {
-	u32 new_value;
+	u32 new_value = 0;
 	switch(endianness){
 		case(BIG_ENDIAN): new_value = (value[3]<<0) | (value[2]<<8) | (value[1]<<16) | (value[0]<<24); break;
 		case(LITTLE_ENDIAN): new_value = (value[0]<<0) | (value[1]<<8) | (value[2]<<16) | (value[3]<<24); break;
@@ -436,7 +442,7 @@ int u64_to_u8(u8 *out_value, u64 in_value, u8 endianness)
 void memdump(FILE* fout, const char* prefix, const u8* data, u32 size)
 {
 	u32 i;
-	u32 prefixlen = strlen(prefix);
+	int prefixlen = strlen(prefix);
 	u32 offs = 0;
 	u32 line = 0;
 	while(size)
@@ -464,7 +470,7 @@ void memdump(FILE* fout, const char* prefix, const u8* data, u32 size)
 // HID related
 u32 wait_key()
 {
-    while (true)
+    while (aptMainLoop())
     {
         hidScanInput();
 
@@ -476,6 +482,8 @@ u32 wait_key()
         gfxFlushBuffers();
         gspWaitForVBlank();
     }
+
+    return 0;
 }
 
 u32 wait_key_specific(const char* message, u32 key)

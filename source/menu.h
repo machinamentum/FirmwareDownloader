@@ -20,7 +20,8 @@ typedef struct ConsoleMenu {
 } ConsoleMenu;
 
 void init_menu(gfxScreen_t screen);
-int menu_draw(const char *title, const char *footer, int back, int count, const char *options[]);
+void menu_multkey_draw(const char *title, const char* footer, int back, int count, const char *options[], void* data,
+                       bool (*callback)(int result, u32 key, void* data));
 int *menu_draw_selection(const char *title, int count, const char *options[], const int *preselected);
 
 #ifdef __cplusplus

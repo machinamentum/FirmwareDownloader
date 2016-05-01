@@ -56,6 +56,7 @@ u32 wait_key();
 u32 wait_key_specific(const char* msg, u32 key);
 // graphics functions
 void clear_screen(gfxScreen_t screen);
+
 #ifdef __cplusplus
 }
 #endif
