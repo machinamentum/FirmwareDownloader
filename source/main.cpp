@@ -201,6 +201,25 @@ void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersi
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName)
 {
+    // Wait for wifi to be available
+    u32 wifi = 0;
+    Result ret;
+    while(R_SUCCEEDED(ret = ACU_GetWifiStatus(&wifi)) && wifi == 0)
+    {
+        hidScanInput();
+        if (hidKeysDown() & KEY_B)
+        {
+            ret = -1;
+            break;
+        }
+    }
+
+    if (R_FAILED(ret))
+    {
+        printf("Unable to access internet.\n");
+        return ret;
+    }
+
     std::string outputDir = "/CIAngel";
 
     if (titleName.length() == 0)
@@ -210,10 +229,10 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
 
     std::string mode_text;
     if(selected_mode == make_cia){
-        mode_text = "creating";
+        mode_text = "create";
     }
     else if(selected_mode == install_direct){
-        mode_text = "installing";
+        mode_text = "install";
     }
 
 
@@ -285,7 +304,7 @@ void ProcessGameQueue()
     }
 
     std::vector<game_item>::iterator game = game_queue.begin();
-    while(game != game_queue.end())
+    while(aptMainLoop() && game != game_queue.end())
     {
         std::string selected_titleid = (*game).titleid;
         std::string selected_enckey = (*game).titlekey;
@@ -844,6 +863,7 @@ int main(int argc, const char* argv[])
     socInit(soc_sharedmem, soc_sharedmem_size);
     sslcInit(0);
     hidInit();
+    acInit();
 
     if (bSvcHaxAvailable)
     {
@@ -859,6 +879,7 @@ int main(int argc, const char* argv[])
         amExit();
     }
 
+    acExit();
     gfxExit();
     hidExit();
     httpcExit();
