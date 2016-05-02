@@ -174,6 +174,16 @@ char* parse_string(const std::string & s)
     return buffer;
 }
 
+std::string get_file_contents(const char *filename)
+{
+  std::ifstream in(filename, std::ios::in | std::ios::binary);
+  if (in)
+  {
+    return(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+  }
+  throw(errno);
+}
+
 void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
 {
     std::ofstream ofs;
@@ -197,6 +207,19 @@ void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersi
     ofs.write(parse_string(encTitleKey), 0x10);
 
     ofs.close();
+}
+
+void InstallTicket(std::string FullPath)
+{
+    Handle hTik;
+    u32 writtenbyte;
+    AM_InstallTicketBegin(&hTik);
+    std::string curr = get_file_contents(FullPath.c_str());
+    FSFILE_Write(hTik, &writtenbyte, 0, curr.c_str(), 0x100000, 0);
+    AM_InstallTicketFinalize(hTik);
+    printf("Ticket Installed.");
+    //delete temp ticket, ticket folder still exists... ugly. later stream directly to the handle
+    remove(FullPath.c_str());
 }
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName)
@@ -312,7 +335,8 @@ void ProcessGameQueue()
 
         if (selected_mode == install_ticket)
         {
-            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik"); 
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik");
+            InstallTicket("/CIAngel/tickets/" + selected_name + ".tik");
         }
         else
         {
@@ -471,7 +495,8 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         if(selected_mode == install_ticket){
             char empty_titleVersion[2] = {0x00, 0x00};
             mkpath("/CIAngel/tickets/", 0777); 
-            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik"); 
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik");
+            InstallTicket("/CIAngel/tickets/" + selected_name + ".tik");
         }
         else{
             DownloadTitle(selected_titleid, selected_enckey, selected_name);
