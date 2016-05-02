@@ -36,6 +36,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bExit = false;
+Json::Value sourceData;
 enum install_modes {make_cia, install_direct, install_ticket};
 install_modes selected_mode = make_cia;
 
@@ -77,11 +78,6 @@ std::vector<game_item> game_queue;
 bool compareByLD(const game_item &a, const game_item &b)
 {
     return a.ld < b.ld;
-}
-
-bool FileExists (std::string name){
-    struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
 }
 
 Result ConvertToCIA(std::string dir, std::string titleName)
@@ -264,7 +260,11 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     mkpath((outputDir + "/tmp/").c_str(), 0777);
 
     // Make sure the CIA doesn't already exist
-    if ( (selected_mode == make_cia) && FileExists(outputDir + "/" + titleName + ".cia"))
+    std::string cp = outputDir + "/" + titleName + ".cia";
+    char *ciaPath = new char[cp.size()+1];
+    ciaPath[cp.size()]=0;
+    memcpy(ciaPath,cp.c_str(),cp.size());
+    if ( (selected_mode == make_cia) && FileExists(ciaPath))
     {
         printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
         return 0;
@@ -550,27 +550,22 @@ void action_search()
     clear_screen(GFX_BOTTOM);
 
     std::vector<game_item> display_output;
-    std::ifstream ifs("/CIAngel/wings.json");
-    Json::Reader reader;
-    Json::Value obj;
-    reader.parse(ifs, obj);
-    const Json::Value& characters = obj; // array of characters
-    for (unsigned int i = 0; i < characters.size(); i++){
+    for (unsigned int i = 0; i < sourceData.size(); i++){
         std::string temp;
-        temp = characters[i]["name"].asString();
+        temp = sourceData[i]["name"].asString();
 
         int ld = levenshtein_distance(upper(temp), upper(searchstring));
-        if(temp.find("-System") == std::string::npos &&  (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) {
+        if(temp.find("-System") == std::string::npos &&  (regionFilter == "off" || sourceData[i]["region"].asString() == regionFilter)) {
             if (ld < 10)
             {
                 game_item item;
                 item.ld = ld;
                 item.index = i;
-                item.titleid = characters[i]["titleid"].asString();
-                item.titlekey = characters[i]["enckey"].asString();
-                item.name = characters[i]["name"].asString();
-                item.region = characters[i]["region"].asString();
-                item.code = characters[i]["code"].asString();
+                item.titleid = sourceData[i]["titleid"].asString();
+                item.titlekey = sourceData[i]["enckey"].asString();
+                item.name = sourceData[i]["name"].asString();
+                item.region = sourceData[i]["region"].asString();
+                item.code = sourceData[i]["code"].asString();
 
                 display_output.push_back(item);
             }
@@ -897,6 +892,15 @@ int main(int argc, const char* argv[])
     }
 
     init_menu(GFX_TOP);
+    // Set up the reading of json
+    check_JSON();
+    printf("loading wings.json...\n");
+    std::ifstream ifs("/CIAngel/wings.json");
+    Json::Reader reader;
+    Json::Value obj;
+    reader.parse(ifs, obj);
+    sourceData = obj; // array of characters
+
     menu_main();
 
     if (bSvcHaxAvailable)

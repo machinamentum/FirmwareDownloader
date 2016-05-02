@@ -31,6 +31,7 @@ void u8_hex_print_le(u8 *array, int len);
 u32 align_value(u32 value, u32 alignment);
 void resolve_flag(unsigned char flag, unsigned char *flag_bool);
 void resolve_flag_u16(u16 flag, unsigned char *flag_bool);
+bool check_JSON();
 //IO Related
 void PrintProgress(u32 nSize, u32 nCurrent);
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output);
@@ -40,6 +41,7 @@ int TruncateFile_u64(char *filename, u64 filelen);
 int fseek_64(FILE *fp, u64 file_pos, int whence);
 int makedir(const char* dir);
 char *getcwdir(char *buffer,int maxlen);
+bool FileExists (char *name);
 Result DownloadFile(const char *url, FILE *os, bool bProgress);
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
 //Data Size conversion
