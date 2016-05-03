@@ -203,7 +203,7 @@ void InstallTicket(std::string FullPath)
     AM_InstallTicketBegin(&hTik);
     std::string curr = get_file_contents(FullPath.c_str());
     FSFILE_Write(hTik, &writtenbyte, 0, curr.c_str(), 0x100000, 0);
-//  AM_InstallTicketFinalize(hTik);
+    AM_InstallTicketFinalize(hTik);
     printf("Ticket Installed.");
     //delete temp ticket, ticket folder still exists... ugly. later stream directly to the handle
     remove(FullPath.c_str());
