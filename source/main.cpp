@@ -266,9 +266,11 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     memcpy(ciaPath,cp.c_str(),cp.size());
     if ( (selected_mode == make_cia) && FileExists(ciaPath))
     {
+        free(ciaPath);
         printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
         return 0;
     }
+    free(ciaPath);
 
     std::ofstream ofs;
 
