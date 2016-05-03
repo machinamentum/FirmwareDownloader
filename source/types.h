@@ -46,4 +46,3 @@ typedef enum
 	BE = 0,
 	LE = 1
 } endianness_flag;
-

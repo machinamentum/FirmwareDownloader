@@ -28,7 +28,7 @@
 #include "utils.h"
 #include "cia.h"
 #include "data.h"
-#include "menu.h"
+#include "menu.cpp"
 
 #include "svchax/svchax.h"
 #include "json/json.h"
@@ -54,15 +54,6 @@ std::string upper(std::string s)
   return ups;
 }
 
-typedef struct {
-  int ld;
-  int index;
-  std::string titleid;
-  std::string titlekey;
-  std::string name;
-  std::string region;
-  std::string code;
-} game_item;
 
 struct find_game_item {
     std::string titleid;
@@ -576,12 +567,8 @@ void action_search()
     std::sort(display_output.begin(), display_output.end(), compareByLD);
 
     // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
-    unsigned int display_amount = 20; 
+    unsigned int display_amount = display_output.size();
     display_output.resize(display_amount);
-    if (display_output.size() < display_amount)
-    {
-        display_amount = display_output.size();
-    }
 
     if (display_amount == 0)
     {
@@ -591,8 +578,8 @@ void action_search()
     }
 
     // Eh, allocated memory because we need to format the data
-    char* results[display_amount];
-    for (u8 i = 0; i < display_amount; i++)
+//    char* results[display_amount];
+ /*   for (u8 i = 0; i < display_amount; i++)
     {
         results[i] = (char*)malloc(51 * sizeof(char));
         sprintf(results[i], "%-30s (%s) %s",
@@ -600,7 +587,7 @@ void action_search()
                 display_output[i].region.c_str(),
                 display_output[i].code.c_str());
     }
-
+*/
     std::string mode_text;
     if(selected_mode == make_cia) {
         mode_text = "Create CIA";
@@ -612,14 +599,13 @@ void action_search()
 
     char footer[51];
     sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
-
-    menu_multkey_draw("Select a Title", footer, 1, sizeof(results) / sizeof(char*), (const char**)results, &display_output, menu_search_keypress);
+    titles_multkey_draw("Select a Title", footer, 1, &display_output, &display_output, menu_search_keypress);
 
     // Free our allocated memory
-    for (u8 i = 0; i < display_amount; i++)
+/*    for (u8 i = 0; i < display_amount; i++)
     {
         free(results[i]);
-    }
+    }*/
 }
 
 void action_prompt_queue()
