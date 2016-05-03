@@ -227,6 +227,11 @@ return getcwd(buffer,maxlen);
 #endif
 }
 
+bool FileExists (char *name){
+    struct stat buffer;
+    return (stat (name, &buffer) == 0);
+}
+
 void DownloadFile_InternalSave(void* out, unsigned char* buffer, u32 readSize)
 {
 	FILE* os = (FILE*)out;
@@ -537,4 +542,13 @@ void clear_screen(gfxScreen_t screen)
     gfxFlushBuffers();
     gfxSwapBuffers();
     gspWaitForVBlank();
+}
+
+bool check_JSON() {
+    if(!FileExists ("/CIAngel/wings.json")) {
+        printf("No wings.json\n Don't expect the search to work\n");
+        wait_key_specific("\nPress A to return.\n", KEY_A);
+        return false;
+    }
+    return true;
 }
