@@ -25,10 +25,10 @@
 
 #include <3ds.h>
 
+#include "menu.h"
 #include "utils.h"
 #include "cia.h"
 #include "data.h"
-#include "menu.cpp"
 
 #include "svchax/svchax.h"
 #include "json/json.h"
@@ -203,7 +203,7 @@ void InstallTicket(std::string FullPath)
     AM_InstallTicketBegin(&hTik);
     std::string curr = get_file_contents(FullPath.c_str());
     FSFILE_Write(hTik, &writtenbyte, 0, curr.c_str(), 0x100000, 0);
-    AM_InstallTicketFinalize(hTik);
+//  AM_InstallTicketFinalize(hTik);
     printf("Ticket Installed.");
     //delete temp ticket, ticket folder still exists... ugly. later stream directly to the handle
     remove(FullPath.c_str());
@@ -577,17 +577,6 @@ void action_search()
         return;
     }
 
-    // Eh, allocated memory because we need to format the data
-//    char* results[display_amount];
- /*   for (u8 i = 0; i < display_amount; i++)
-    {
-        results[i] = (char*)malloc(51 * sizeof(char));
-        sprintf(results[i], "%-30s (%s) %s",
-                display_output[i].name.c_str(),
-                display_output[i].region.c_str(),
-                display_output[i].code.c_str());
-    }
-*/
     std::string mode_text;
     if(selected_mode == make_cia) {
         mode_text = "Create CIA";
@@ -600,12 +589,6 @@ void action_search()
     char footer[51];
     sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
     titles_multkey_draw("Select a Title", footer, 1, &display_output, &display_output, menu_search_keypress);
-
-    // Free our allocated memory
-/*    for (u8 i = 0; i < display_amount; i++)
-    {
-        free(results[i]);
-    }*/
 }
 
 void action_prompt_queue()
