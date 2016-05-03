@@ -436,6 +436,22 @@ std::string ToHex(const std::string& s)
     return ret.str();
 }
 
+void load_JSON_data() 
+{
+    printf("loading wings.json...\n");
+    std::ifstream ifs("/CIAngel/wings.json");
+    Json::Reader reader;
+    Json::Value obj;
+    reader.parse(ifs, obj);
+    sourceData = obj; // array of characters
+    
+    if(sourceData[0]["titleID"].isString()) {
+      sourceDataType = JSON_TYPE_WINGS;
+    } else if (sourceData[0]["titleid"].isString()) {
+      sourceDataType = JSON_TYPE_ONLINE;
+    }
+}
+
 int levenshtein_distance(const std::string &s1, const std::string &s2)
 {
     // To change the type this function manipulates and returns, change
@@ -787,9 +803,11 @@ void action_exit()
 {
     bExit = true;
 }
+
 void action_download()
 {
   download_JSON();
+  load_JSON_data();
 }
 
 // Main menu keypress callback
@@ -915,20 +933,8 @@ int main(int argc, const char* argv[])
     init_menu(GFX_TOP);
     // Set up the reading of json
     check_JSON();
-    printf("loading wings.json...\n");
-    std::ifstream ifs("/CIAngel/wings.json");
-    Json::Reader reader;
-    Json::Value obj;
-    reader.parse(ifs, obj);
-    sourceData = obj; // array of characters
+    load_JSON_data();
     
-    if(sourceData[0]["titleID"].isString()) {
-      sourceDataType = JSON_TYPE_WINGS;
-    } else if (sourceData[0]["titleid"].isString()) {
-      sourceDataType = JSON_TYPE_ONLINE;
-    }
-
-
     menu_main();
 
     if (bSvcHaxAvailable)
