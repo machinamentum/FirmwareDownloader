@@ -587,8 +587,10 @@ void action_search()
     }
 
     char footer[51];
+    char header[51];
+    sprintf(header, "Select a Title (found %i results)", display_amount);
     sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
-    titles_multkey_draw("Select a Title", footer, 1, &display_output, &display_output, menu_search_keypress);
+    titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
 }
 
 void action_prompt_queue()
