@@ -66,14 +66,6 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
     int menu_end_y = currentMenu.menuConsole.consoleHeight -1; 
     int current_pos_y = 0;
 
-
-
-    // Don't allow the menu to draw beyond the edge of the screen, just truncate if so
-/*    for (int i = 1; i < count && i < (currentMenu.menuConsole.consoleHeight - 2); i++) {
-        pos_y_text[i] = current_pos_y;
-        menu_draw_string(options[i], 1, current_pos_y++, CONSOLE_WHITE);
-    }
-*/
     while (true) {
         if(previous_index != current) {
             int results_per_page = menu_end_y - menu_pos_y;
@@ -235,78 +227,3 @@ void menu_multkey_draw(const char *title, const char* footer, int back, int coun
     // Reselect the original console
     consoleSelect(currentConsole);
 }
-
-int *menu_draw_selection(const char *title, int count, const char *options[], const int *preselected)
-{
-    // The caller has to make sure it does not exceed MAX_SELECTED_OPTIONS
-    // if (count > MAX_SELECTED_OPTIONS) {
-    //     return NULL;
-    // }
-
-    // memset(selected_options, 0, sizeof(selected_options));
-
-    // int current = 0;
-    // int pos_x_text = 4 * SPACING_HORIZ;
-    // int pos_y_text[count];
-    // int current_pos_y = 30;
-
-    // clear_screen(GFX_TOP);
-    // draw_string(GFX_TOP, title, 0, 0, COLOR_TITLE);
-
-    // pos_y_text[0] = current_pos_y;
-    // draw_string(GFX_TOP, "[ ]", 0, current_pos_y, COLOR_NEUTRAL);
-    // current_pos_y = draw_string(GFX_TOP, options[0], pos_x_text, current_pos_y, COLOR_SELECTED);
-    // int i;
-    // for (i = 1; i < count; i++) {
-    //     current_pos_y += SPACING_VERT;
-    //     pos_y_text[i] = current_pos_y;
-    //     draw_string(GFX_TOP, "[ ]", 0, current_pos_y, COLOR_NEUTRAL);
-    //     current_pos_y = draw_string(GFX_TOP, options[i], pos_x_text, current_pos_y, COLOR_NEUTRAL);
-    // }
-    // draw_string(GFX_TOP, "Press START to confirm", 0, current_pos_y + SPACING_VERT * 2, COLOR_SELECTED);
-
-    // for (int i = 0; i < count; i++) {
-    //     if (preselected[i]) {
-    //         draw_character(GFX_TOP, 'x', 0 + SPACING_HORIZ, pos_y_text[i], COLOR_NEUTRAL);
-    //         selected_options[i] = 1;
-    //     }
-    // }
-
-    // while (1) {
-    //     u16 key = wait_key();
-
-    //     if (key & KEY_UP) {
-    //         draw_string(GFX_TOP, options[current], pos_x_text, pos_y_text[current], COLOR_NEUTRAL);
-
-    //         if (current <= 0) {
-    //             current = count - 1;
-    //         } else {
-    //             current--;
-    //         }
-
-    //         draw_string(GFX_TOP, options[current], pos_x_text, pos_y_text[current], COLOR_SELECTED);
-    //     } else if (key & KEY_DOWN) {
-    //         draw_string(GFX_TOP, options[current], pos_x_text, pos_y_text[current], COLOR_NEUTRAL);
-
-    //         if (current >= count - 1) {
-    //             current = 0;
-    //         } else {
-    //             current++;
-    //         }
-
-    //         draw_string(GFX_TOP, options[current], pos_x_text, pos_y_text[current], COLOR_SELECTED);
-    //     } else if (key & KEY_A) {
-    //         if (selected_options[current]) {
-    //             draw_character(GFX_TOP, 'x', 0 + SPACING_HORIZ, pos_y_text[current], COLOR_BACKGROUND);
-    //             selected_options[current] = 0;
-    //         } else {
-    //             draw_character(GFX_TOP, 'x', 0 + SPACING_HORIZ, pos_y_text[current], COLOR_NEUTRAL);
-    //             selected_options[current] = 1;
-    //         }
-    //     } else if ((key & KEY_START) || (key & KEY_B)) {
-    //         return selected_options;
-    //     }
-    // }
-    return 0;
-}
-
