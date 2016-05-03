@@ -36,6 +36,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bExit = false;
+int sourceDataType;
 Json::Value sourceData;
 enum install_modes {make_cia, install_direct, install_ticket};
 install_modes selected_mode = make_cia;
@@ -561,11 +562,23 @@ void action_search()
                 game_item item;
                 item.ld = ld;
                 item.index = i;
-                item.titleid = sourceData[i]["titleid"].asString();
-                item.titlekey = sourceData[i]["enckey"].asString();
-                item.name = sourceData[i]["name"].asString();
-                item.region = sourceData[i]["region"].asString();
-                item.code = sourceData[i]["code"].asString();
+
+                switch(sourceDataType) {
+                case JSON_TYPE_WINGS:
+                  item.titleid = sourceData[i]["titleid"].asString();
+                  item.titlekey = sourceData[i]["enckey"].asString();
+                  item.name = sourceData[i]["name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["code"].asString();
+                  break;
+                case JSON_TYPE_ONLINE:
+                  item.titleid = sourceData[i]["titleID"].asString();
+                  item.titlekey = sourceData[i]["encTitleKey"].asString();
+                  item.name = sourceData[i]["name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["serial"].asString();
+                  break;
+                }
 
                 display_output.push_back(item);
             }
@@ -774,6 +787,10 @@ void action_exit()
 {
     bExit = true;
 }
+void action_download()
+{
+  download_JSON();
+}
 
 // Main menu keypress callback
 bool menu_main_keypress(int selected, u32 key, void*)
@@ -796,9 +813,12 @@ bool menu_main_keypress(int selected, u32 key, void*)
                 action_input_txt();
             break;
             case 4:
-                action_about();
+                action_download();
             break;
             case 5:
+                action_about();
+            break;
+            case 6:
                 action_exit();
             break;
         }
@@ -828,8 +848,9 @@ void menu_main()
         "Process download queue",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",
+        "Download wings.json",
         "About CIAngel",
-        "Exit"
+        "Exit",
     };
     char footer[50];
 
@@ -900,6 +921,13 @@ int main(int argc, const char* argv[])
     Json::Value obj;
     reader.parse(ifs, obj);
     sourceData = obj; // array of characters
+    
+    if(sourceData[0]["titleID"].isString()) {
+      sourceDataType = JSON_TYPE_WINGS;
+    } else if (sourceData[0]["titleid"].isString()) {
+      sourceDataType = JSON_TYPE_ONLINE;
+    }
+
 
     menu_main();
 

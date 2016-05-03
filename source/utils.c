@@ -544,10 +544,35 @@ void clear_screen(gfxScreen_t screen)
     gspWaitForVBlank();
 }
 
+bool download_JSON() {
+  printf("Attempting to download JSON...\n");
+  remove("/CIAngel/wings.json.tmp");
+  FILE *oh = fopen("/CIAngel/wings.json.tmp", "wb");
+  if (oh) {
+    Result res = DownloadFile(JSON_URL, oh, false);
+    fclose(oh);
+    if (res != 0) {
+      printf("Failed to download JSON");
+    } else {
+      remove("/CIAngel/wings.json");
+      rename("/CIAngel/wings.json.tmp", "/CIAngel/wings.json");
+      return true;
+    }
+  }
+  return false;
+}
+
 bool check_JSON() {
     if(!FileExists ("/CIAngel/wings.json")) {
-        printf("No wings.json\n Don't expect the search to work\n");
-        wait_key_specific("\nPress A to return.\n", KEY_A);
+        printf("No wings.json\n");
+
+        printf("\nPress A to Download, or any other key to return.\n");
+        u32 keys = wait_key();
+        
+        if (keys & KEY_A) {
+          return download_JSON();
+        }
+        printf("\nDon't expect search to work\n");
         return false;
     }
     return true;
