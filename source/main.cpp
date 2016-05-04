@@ -524,6 +524,7 @@ void action_search()
     utf8proc_uint8_t* szName;
     utf8proc_uint8_t *str;
     int outScore;
+    
     for (unsigned int i = 0; i < sourceData.size(); i++) {
         if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
             continue;
@@ -532,7 +533,6 @@ void action_search()
         // Normalize the name down to ASCII. This may break Japanese characters...
         str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
         utf8proc_map(str, 0, &szName, options);
-
         // Fuzzy match based on the search term
         if (fts::fuzzy_match(searchString.c_str(), (const char*)szName, outScore))
         {
@@ -568,11 +568,9 @@ void action_search()
         free(szName);
     }
 
-    // sort similar names by fuzzy score
-    std::sort(display_output.begin(), display_output.end(), compareByScore);
+    unsigned int display_amount = display_output.size();
 
     // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
-    unsigned int display_amount = display_output.size();
 
     if (display_amount == 0)
     {
@@ -581,6 +579,11 @@ void action_search()
         return;
     }
 
+    // sort similar names by fuzzy score
+    if(display_amount>1) {
+        std::sort(display_output.begin(), display_output.end(), compareByScore);
+    }
+    
     std::string mode_text;
     if(selected_mode == make_cia) {
         mode_text = "Create CIA";

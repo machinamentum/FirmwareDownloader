@@ -58,8 +58,9 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
     PrintConsole* currentConsole = consoleSelect(&currentMenu.menuConsole);
     
     int count = options->size();
+    bool firstLoop = true;
     int current = 0;
-    int previous_index = 1;
+    int previous_index = 0;
     int menu_offset = 0;
     int previous_menu_offset = 1;
     int menu_pos_y;
@@ -67,7 +68,8 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
     int current_pos_y = 0;
 
     while (aptMainLoop()) {
-        if(previous_index != current) {
+        if(firstLoop || previous_index != current) {
+            firstLoop = false;
             int results_per_page = menu_end_y - menu_pos_y;
             int current_page = current / results_per_page;
             menu_offset = current_page * results_per_page;
