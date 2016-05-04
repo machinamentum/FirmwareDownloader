@@ -267,9 +267,11 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     memcpy(ciaPath,cp.c_str(),cp.size());
     if ( (selected_mode == make_cia) && FileExists(ciaPath))
     {
+        free(ciaPath);
         printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
         return 0;
     }
+    free(ciaPath);
 
     std::ofstream ofs;
 
@@ -698,6 +700,7 @@ void action_manual_entry()
 {
     HB_Keyboard sHBKB;
     bool bKBCancelled = false;
+    std::string key;
 
     consoleClear();
 
@@ -711,13 +714,24 @@ void action_manual_entry()
             break;
         }
 
-        printf("Please enter the corresponding encTitleKey:\n");
-        std::string key = getInput(&sHBKB, bKBCancelled);
-        if (bKBCancelled)
-        {
-            break;
-        }
+        for (unsigned int i = 0; i < sourceData.size(); i++){
+            std::string tempId = sourceData[i]["titleid"].asString();
+            std::string tempKey = sourceData[i]["enckey"].asString();
 
+            if(tempId.compare(titleId) == 0 && tempKey.size() == 32) {
+               printf("Found encTitleKey, proceeding automatically\n"); 
+               key = tempKey;
+               break;
+            }
+        }
+        if(key.size() != 32) {
+            printf("Please enter the corresponding encTitleKey:\n");
+            std::string key = getInput(&sHBKB, bKBCancelled);
+            if (bKBCancelled)
+            {
+                break;
+            }
+        }
         if (titleId.length() == 16 && key.length() == 32)
         {
             DownloadTitle(titleId, key, "");
