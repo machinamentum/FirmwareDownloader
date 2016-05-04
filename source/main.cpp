@@ -446,9 +446,9 @@ void load_JSON_data()
     sourceData = obj; // array of characters
     
     if(sourceData[0]["titleID"].isString()) {
-      sourceDataType = JSON_TYPE_WINGS;
-    } else if (sourceData[0]["titleid"].isString()) {
       sourceDataType = JSON_TYPE_ONLINE;
+    } else if (sourceData[0]["titleid"].isString()) {
+      sourceDataType = JSON_TYPE_WINGS;
     }
 }
 

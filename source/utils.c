@@ -545,20 +545,23 @@ void clear_screen(gfxScreen_t screen)
 }
 
 bool download_JSON() {
-  printf("Attempting to download JSON...\n");
+  printf("\nAttempting to download JSON...\n");
+  
   remove("/CIAngel/wings.json.tmp");
   FILE *oh = fopen("/CIAngel/wings.json.tmp", "wb");
+  
   if (oh) {
     Result res = DownloadFile(JSON_URL, oh, false);
+    int size = ftell(oh);
     fclose(oh);
-    if (res != 0) {
-      printf("Failed to download JSON");
-    } else {
+    if (res == 0 && size >= 0) {
       remove("/CIAngel/wings.json");
       rename("/CIAngel/wings.json.tmp", "/CIAngel/wings.json");
       return true;
     }
   }
+  
+  printf("Failed to download JSON");
   return false;
 }
 
