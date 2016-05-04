@@ -66,22 +66,21 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
     int menu_end_y = currentMenu.menuConsole.consoleHeight -1; 
     int current_pos_y = 0;
 
-    while (true) {
+    while (aptMainLoop()) {
         if(previous_index != current) {
             int results_per_page = menu_end_y - menu_pos_y;
-            //results_per_page = 10;
             int current_page = current / results_per_page;
             menu_offset = current_page * results_per_page;
             char prev_entry[50];
             char entry[50];
-            sprintf(prev_entry, "%-30s (%s) %s",
-                (*options)[previous_index].name.c_str(),
+            sprintf(prev_entry, "%-*.*s (%s) %*.*s",
+                31, 31, (*options)[previous_index].name.c_str(),
                 (*options)[previous_index].region.c_str(),
-                (*options)[previous_index].code.c_str());
-            sprintf(entry, "%-30s (%s) %s",
-                (*options)[current].name.c_str(),
+                10, 10, (*options)[previous_index].code.c_str());
+            sprintf(entry, "%-*.*s (%s) %*.*s",
+                31, 31, (*options)[current].name.c_str(),
                 (*options)[current].region.c_str(),
-                (*options)[current].code.c_str());
+                10, 10, (*options)[current].code.c_str());
             if(menu_offset == previous_menu_offset) {
                 menu_draw_string(prev_entry, 1, menu_pos_y + (previous_index-menu_offset), CONSOLE_WHITE);
                 menu_draw_string(entry, 1, menu_pos_y + (current-menu_offset), CONSOLE_REVERSE);
@@ -92,10 +91,10 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
                 menu_draw_string(title, 0, current_pos_y++, CONSOLE_RED);
                 menu_pos_y = current_pos_y;
                 for (int i = 0; menu_offset + i < count && i < results_per_page; i++) {
-                    sprintf(entry, "%-30s (%s) %s",
-                        (*options)[menu_offset + i].name.c_str(),
+                    sprintf(entry, "%-*.*s (%s) %*.*s",
+                        31, 31, (*options)[menu_offset + i].name.c_str(),
                         (*options)[menu_offset + i].region.c_str(),
-                        (*options)[menu_offset + i].code.c_str());
+                        10, 10, (*options)[menu_offset + i].code.c_str());
                     if(i+menu_offset == current) {
                         menu_draw_string(entry, 1, current_pos_y, CONSOLE_REVERSE);
                     } else {

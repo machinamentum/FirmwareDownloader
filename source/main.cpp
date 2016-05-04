@@ -32,6 +32,8 @@
 
 #include "svchax/svchax.h"
 #include "json/json.h"
+#include "fts_fuzzy_match.h"
+#include "utf8proc/utf8proc.h"
 
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
@@ -55,7 +57,6 @@ std::string upper(std::string s)
   return ups;
 }
 
-
 struct find_game_item {
     std::string titleid;
     find_game_item(std::string titleid) : titleid(titleid) {}
@@ -67,9 +68,9 @@ struct find_game_item {
 // Vector used for download queue
 std::vector<game_item> game_queue;
 
-bool compareByLD(const game_item &a, const game_item &b)
+bool compareByScore(const game_item &a, const game_item &b)
 {
-    return a.ld < b.ld;
+    return a.score > b.score;
 }
 
 Result ConvertToCIA(std::string dir, std::string titleName)
@@ -550,7 +551,7 @@ void action_search()
     consoleClear();
 
     printf("Please enter text to search for:\n");
-    std::string searchstring = getInput(&sHBKB, bKBCancelled);
+    std::string searchString = getInput(&sHBKB, bKBCancelled);
     if (bKBCancelled)
     {
         return;
@@ -560,46 +561,56 @@ void action_search()
     clear_screen(GFX_BOTTOM);
 
     std::vector<game_item> display_output;
-    for (unsigned int i = 0; i < sourceData.size(); i++){
-        std::string temp;
-        temp = sourceData[i]["name"].asString();
 
-        int ld = levenshtein_distance(upper(temp), upper(searchstring));
-        if(temp.find("-System") == std::string::npos &&  (regionFilter == "off" || sourceData[i]["region"].asString() == regionFilter)) {
-            if (ld < 10)
-            {
-                game_item item;
-                item.ld = ld;
-                item.index = i;
-
-                switch(sourceDataType) {
-                case JSON_TYPE_WINGS:
-                  item.titleid = sourceData[i]["titleid"].asString();
-                  item.titlekey = sourceData[i]["enckey"].asString();
-                  item.name = sourceData[i]["name"].asString();
-                  item.region = sourceData[i]["region"].asString();
-                  item.code = sourceData[i]["code"].asString();
-                  break;
-                case JSON_TYPE_ONLINE:
-                  item.titleid = sourceData[i]["titleID"].asString();
-                  item.titlekey = sourceData[i]["encTitleKey"].asString();
-                  item.name = sourceData[i]["name"].asString();
-                  item.region = sourceData[i]["region"].asString();
-                  item.code = sourceData[i]["serial"].asString();
-                  break;
-                }
-
-                display_output.push_back(item);
-            }
+    // UTF8 normalization stuff
+    utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
+    utf8proc_uint8_t* szName;
+    utf8proc_uint8_t *str;
+    int outScore;
+    for (unsigned int i = 0; i < sourceData.size(); i++) {
+        if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+            continue;
         }
+
+        // Normalize the name down to ASCII. This may break Japanese characters...
+        str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
+        utf8proc_map(str, 0, &szName, options);
+
+        // Fuzzy match based on the search term
+        if (fts::fuzzy_match(searchString.c_str(), (const char*)szName, outScore))
+        {
+            game_item item;
+            item.score = outScore;
+            item.index = i;
+
+            switch(sourceDataType) {
+            case JSON_TYPE_WINGS:
+              item.titleid = sourceData[i]["titleid"].asString();
+              item.titlekey = sourceData[i]["enckey"].asString();
+              item.name = (const char*)szName;
+              item.region = sourceData[i]["region"].asString();
+              item.code = sourceData[i]["code"].asString();
+              break;
+            case JSON_TYPE_ONLINE:
+              item.titleid = sourceData[i]["titleID"].asString();
+              item.titlekey = sourceData[i]["encTitleKey"].asString();
+              item.name = (const char*)szName;
+              item.region = sourceData[i]["region"].asString();
+              item.code = sourceData[i]["serial"].asString();
+              break;
+            }
+
+            display_output.push_back(item);
+        }
+
+        free(szName);
     }
 
-    // sort similar names by levenshtein distance
-    std::sort(display_output.begin(), display_output.end(), compareByLD);
+    // sort similar names by fuzzy score
+    std::sort(display_output.begin(), display_output.end(), compareByScore);
 
     // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
     unsigned int display_amount = display_output.size();
-    display_output.resize(display_amount);
 
     if (display_amount == 0)
     {
@@ -791,8 +802,10 @@ void action_exit()
 
 void action_download()
 {
-  download_JSON();
-  load_JSON_data();
+    consoleClear();
+
+    download_JSON();
+    load_JSON_data();
 }
 
 // Main menu keypress callback
