@@ -1,10 +1,15 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#ifndef __MENU_H_INCLUDED__
+#define __MENU_H_INCLUDED__
 #include <3ds.h>
+#include <string>
+#include <vector>
+#include <stdio.h>
+
+#include <stdint.h>
+#include <stddef.h>
+
 
 #define MAX_SELECTED_OPTIONS 0x10
 
@@ -19,11 +24,23 @@ typedef struct ConsoleMenu {
 	PrintConsole menuConsole;
 } ConsoleMenu;
 
+typedef struct {
+  int ld;
+  int index;
+  std::string titleid;
+  std::string titlekey;
+  std::string name;
+  std::string region;
+  std::string code;
+} game_item;
+
+extern ConsoleMenu currentMenu;
 void init_menu(gfxScreen_t screen);
+void menu_draw_string(const char* str, int pos_x, int pos_y, const char* color);
+void menu_draw_string_full(const char* str, int pos_y, const char* color);
+void titles_multkey_draw(const char *title, const char* footer, int back, std::vector<game_item> *options, void* data,
+                         bool (*callback)(int result, u32 key, void* data));
 void menu_multkey_draw(const char *title, const char* footer, int back, int count, const char *options[], void* data,
                        bool (*callback)(int result, u32 key, void* data));
-int *menu_draw_selection(const char *title, int count, const char *options[], const int *preselected);
 
-#ifdef __cplusplus
-}
-#endif
+#endif // __MENU_H_INCLUDED__
