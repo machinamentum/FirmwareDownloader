@@ -571,7 +571,9 @@ bool check_JSON() {
     time_t curtime = time(NULL);
 
     if (ret == 0) {
-      double age_seconds = difftime(filestats.st_mtime, curtime);
+      u64 mtime;
+      sdmc_getmtime("/CIAngel/wings.json", &mtime);
+      double age_seconds = difftime(curtime, mtime);
       double age_days = age_seconds / (60 * 60 * 24);
 
       if (age_seconds > JSON_UPDATE_INTERVAL_IN_SECONDS) {
@@ -600,3 +602,4 @@ bool check_JSON() {
 
     return true;
 }
+
