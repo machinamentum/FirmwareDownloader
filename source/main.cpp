@@ -340,6 +340,12 @@ std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
     std::string input;
     while (KBState != 1 || input.length() == 0)
     {
+        if (!aptMainLoop())
+        {
+            bCancelled = true;
+            break;
+        }
+
         hidScanInput();
         hidTouchRead(&touch);
         KBState = sHBKB->HBKB_CallKeyboard(touch);
@@ -438,6 +444,12 @@ void load_JSON_data()
 bool menu_search_keypress(int selected, u32 key, void* data)
 {
     std::vector<game_item>* cb_data = (std::vector<game_item>*)data;
+
+    // If key is 0, it means aptMainLoop() returned false, so we're exiting
+    // Go back to the previous menu which will handle quitting
+    if (!key) {
+        return true;
+    }
 
     // B goes back a screen
     if (key & KEY_B)
@@ -776,6 +788,11 @@ void action_download()
 // Main menu keypress callback
 bool menu_main_keypress(int selected, u32 key, void*)
 {
+    // If key is 0, it means aptMainLoop() returned false, so we're quitting
+    if (!key) {
+        return true;
+    }
+
     // A button triggers standard actions
     if (key & KEY_A)
     {
@@ -835,7 +852,7 @@ void menu_main()
     };
     char footer[50];
 
-    while (!bExit)
+    while (!bExit && aptMainLoop())
     {
         std::string mode_text;
         if(selected_mode == make_cia) {

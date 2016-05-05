@@ -115,11 +115,6 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
             previous_index = current;
         }
         u32 key = wait_key();
-
-        // If key is 0, it means aptMainLoop() returned false
-        if (!key) {
-            break;
-        }
         
         if (key & KEY_UP) {
             if (current <= 0) {
@@ -196,11 +191,6 @@ void menu_multkey_draw(const char *title, const char* footer, int back, int coun
             previous_index = current;
         }
         u32 key = wait_key();
-
-        // If key is 0, it means aptMainLoop() returned false
-        if (!key) {
-            break;
-        }
         
         if (key & KEY_UP) {
             if (current <= 0) {
