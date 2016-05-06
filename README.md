@@ -4,7 +4,11 @@ It's early and experiemental at the moment, this will be improved.
 -----------------------------
 
 Now we can build CIAs on the 3DS!
-Using a Title ID and an encrypted title key, or searching for a title by name, a GOOD CIAs will be produced or directly installed that can be redownloaded from eshop and updated from eshop if new content comes out. These CIAs will not interfere with content from eshop.
+Using a Title ID and an encrypted title key, or searching for a title by name, GOOD CIAs will be produced or directly installed that can be redownloaded from eshop and updated from eshop if new content comes out. These CIAs will not interfere with content from eshop.
+
+You can choose to create a CIA, install the game directly, or install only the ticket.
+
+
 
 Many thanks for machinamentum and FirmwareDownloader! Thanks to make_cdn_cia!
 
