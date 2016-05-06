@@ -566,17 +566,40 @@ bool download_JSON() {
 }
 
 bool check_JSON() {
-    if(!FileExists ("/CIAngel/wings.json")) {
-        printf("No wings.json\n");
+    struct stat filestats;
+    int ret = stat("/CIAngel/wings.json", &filestats);
+    time_t curtime = time(NULL);
 
-        printf("\nPress A to Download, or any other key to return.\n");
+    if (ret == 0) {
+      u64 mtime;
+      sdmc_getmtime("/CIAngel/wings.json", &mtime);
+      double age_seconds = difftime(curtime, mtime);
+      double age_days = age_seconds / (60 * 60 * 24);
+
+      if (age_seconds > JSON_UPDATE_INTERVAL_IN_SECONDS) {
+        printf("Your wings.json is %d days old\n\n", (int)age_days);
+        printf("Press A to update, or any other key to skip.\n");
+
         u32 keys = wait_key();
-        
+
         if (keys & KEY_A) {
           return download_JSON();
         }
-        printf("\nDon't expect search to work\n");
-        return false;
+        return true;
+      }
+    } else {
+      printf("No wings.json\n");
+
+      printf("\nPress A to Download, or any other key to return.\n");
+      u32 keys = wait_key();
+      
+      if (keys & KEY_A) {
+        return download_JSON();
+      }
+      printf("\nDon't expect search to work\n");
+      return false;
     }
+
     return true;
 }
+
