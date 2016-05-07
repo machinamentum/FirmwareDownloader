@@ -184,11 +184,10 @@ CIA_HEADER set_cia_header(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	cia_header.tmd_size = tmd_context.tmd_size;
 	cia_header.meta_size = 0;
 	cia_header.content_size = get_content_size(tmd_context);
-	u64 index = 0;
-	for(int i = 0; i < tmd_context.content_count; i++){
-		index += (0x8000000000000000/(2<<u8_to_u16(tmd_context.content_struct[i].content_index,BE)))*2;
+	for(int i = 0; i < tmd_context.content_count; i++) {
+		u16 index = u8_to_u16(tmd_context.content_struct[i].content_index, BIG_ENDIAN);
+		cia_header.content_index[index / 8] |= 0x80 >> (index & 7);
 	}
-	u64_to_u8(cia_header.content_index,index,BE);
 	return cia_header;
 }
 
