@@ -911,6 +911,9 @@ int main(int argc, const char* argv[])
     }
 
     init_menu(GFX_TOP);
+    if(stat("/CIAngel", nullptr) == -1) {
+        mkdir("/CIAngel", 0777); 
+    }
     // Set up the reading of json
     check_JSON();
     load_JSON_data();
