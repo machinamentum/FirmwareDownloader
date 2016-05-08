@@ -155,8 +155,7 @@ typedef struct
 	u32 tmd_size;
 	u32 meta_size;
 	u64 content_size;
-	u8 content_index[8];
-	u8 reserved[0x1ff8];
+	u8 content_index[0x2000];
 } CIA_HEADER;
 
 // Main Functions
