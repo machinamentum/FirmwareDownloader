@@ -677,7 +677,7 @@ void action_manual_entry()
             std::string tempId = sourceData[i]["titleid"].asString();
             std::string tempKey = sourceData[i]["enckey"].asString();
 
-            if(tempId.compare(titleId) == 0 && tempKey.size() == 32) {
+            if(tempId.compare(titleId) == 0 && tempKey.length() == 32) {
                printf("Found encTitleKey, proceeding automatically\n"); 
                key = tempKey;
                break;
