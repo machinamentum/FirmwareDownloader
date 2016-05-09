@@ -659,7 +659,6 @@ void action_manual_entry()
 {
     HB_Keyboard sHBKB;
     bool bKBCancelled = false;
-    std::string key;
 
     consoleClear();
 
