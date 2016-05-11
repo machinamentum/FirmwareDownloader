@@ -440,13 +440,11 @@ Result DownloadFileSecure_Internal(const char *hostname, const char* request, vo
 
         if (!bHeaderEnded)
         {
-        	printf("ReadBuf: %s\n", readbuf);
         	// Skip over the header, we don't really care about its contents.
         	// Technically there's a very slim chance this fails to find the header
         	char* headend = strstr((const char*)readbuf, "\r\n\r\n");
         	if (headend != NULL)
         	{
-        		printf("Headend: %s\n", headend);
         		int headlen = (headend - (char*)readbuf) + 4;
         		write(out, (u8*)(headend + 4), (ret - headlen));
         		bHeaderEnded = true;
@@ -719,7 +717,6 @@ bool download_JSON() {
     Result res = DownloadFile(JSON_URL, oh, false);
     int size = ftell(oh);
     fclose(oh);
-    wait_key_specific("Press A to continue.\n", KEY_A);
     if (res == 0 && size >= 0) {
       remove("/CIAngel/wings.json");
       rename("/CIAngel/wings.json.tmp", "/CIAngel/wings.json");
