@@ -25,6 +25,7 @@
 
 #include <3ds.h>
 
+#include "config.h"
 #include "menu.h"
 #include "utils.h"
 #include "cia.h"
@@ -40,10 +41,8 @@ static bool bSvcHaxAvailable = true;
 static bool bExit = false;
 int sourceDataType;
 Json::Value sourceData;
-enum install_modes {make_cia, install_direct, install_ticket};
-install_modes selected_mode = make_cia;
 
-static std::string regionFilter = "off";
+CConfig config;
 
 struct find_game_item {
     std::string titleid;
@@ -87,7 +86,7 @@ Result ProcessCIA(std::string dir, std::string titleName)
     }
 
     int result;
-    if (selected_mode == install_direct)
+    if (config.GetMode() == CConfig::Mode::INSTALL_CIA)
     {
         result = install_cia(tmd_context, tik_context);
     }
@@ -241,10 +240,12 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     }
 
     std::string mode_text;
-    if(selected_mode == make_cia){
+    if(config.GetMode() == CConfig::Mode::DOWNLOAD_CIA)
+    {
         mode_text = "create";
     }
-    else if(selected_mode == install_direct){
+    else if(config.GetMode() == CConfig::Mode::INSTALL_CIA)
+    {
         mode_text = "install";
     }
 
@@ -256,7 +257,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     char *ciaPath = new char[cp.size()+1];
     ciaPath[cp.size()]=0;
     memcpy(ciaPath,cp.c_str(),cp.size());
-    if ( (selected_mode == make_cia) && FileExists(ciaPath))
+    if (config.GetMode() == CConfig::Mode::DOWNLOAD_CIA && FileExists(ciaPath))
     {
         free(ciaPath);
         printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
@@ -299,7 +300,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
         return res;
     }
 
-    if (selected_mode == make_cia)
+    if (config.GetMode() == CConfig::Mode::DOWNLOAD_CIA)
     {
         rename((outputDir + "/tmp/" + titleName + ".cia").c_str(), (outputDir + "/" + titleName + ".cia").c_str());
     }
@@ -321,7 +322,7 @@ void ProcessGameQueue()
         std::string selected_enckey = (*game).titlekey;
         std::string selected_name = (*game).name;
 
-        if (selected_mode == install_ticket)
+        if (config.GetMode() == CConfig::Mode::INSTALL_TICKET)
         {
             CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
             InstallTicket("/CIAngel/tmp/ticket");
@@ -445,6 +446,17 @@ void load_JSON_data()
     }
 }
 
+void loadConfig()
+{
+    // Load config, and force mode to DOWNLOAD_CIA if svcHax not available, then resave
+    config.LoadConfig("/CIAngel/config.json");
+    if (!bSvcHaxAvailable)
+    {
+        config.SetMode(CConfig::Mode::DOWNLOAD_CIA);
+    }
+    config.SaveConfig();
+}
+
 // Search menu keypress callback
 bool menu_search_keypress(int selected, u32 key, void* data)
 {
@@ -477,12 +489,14 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         //removes any problem chars, not sure if whitespace is a problem too...?
         removeForbiddenChar(&selected_name);
 
-        if(selected_mode == install_ticket){
+        if(config.GetMode() == CConfig::Mode::INSTALL_TICKET)
+        {
             char empty_titleVersion[2] = {0x00, 0x00};
             CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
             InstallTicket("/CIAngel/tmp/ticket");
         }
-        else{
+        else
+        {
             DownloadTitle(selected_titleid, selected_enckey, selected_name);
         }
 
@@ -543,6 +557,7 @@ void action_search()
     
     for (unsigned int i = 0; i < sourceData.size(); i++) {
         // Check the region filter
+        std::string regionFilter = config.GetRegionFilter();
         if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
             continue;
         }
@@ -608,12 +623,17 @@ void action_search()
     }
     
     std::string mode_text;
-    if(selected_mode == make_cia) {
-        mode_text = "Create CIA";
-    } else if (selected_mode == install_direct) {
-        mode_text = "Install CIA";
-    } else if (selected_mode == install_ticket) {
-        mode_text = "Create Ticket";
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            mode_text = "Create CIA";
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            mode_text = "Install CIA";
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            mode_text = "Create Ticket";
+        break;
     }
 
     char footer[51];
@@ -628,14 +648,17 @@ void action_prompt_queue()
     consoleClear();
 
     std::string mode_text;
-    if(selected_mode == make_cia) {
-        mode_text = "download";
-    }
-    else if (selected_mode == install_direct) {
-        mode_text = "install";
-    }
-    else if (selected_mode == install_ticket) {
-        mode_text = "create tickets for";
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            mode_text = "download";
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            mode_text = "install";
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            mode_text = "create tickets for";
+        break;
     }
 
     printf("Queue contains %d items.\n", game_queue.size());
@@ -740,29 +763,38 @@ void action_input_txt()
 void action_toggle_install()
 {
     consoleClear();
+    CConfig::Mode nextMode = CConfig::Mode::INSTALL_CIA;
 
-    if(selected_mode == make_cia) {
-        selected_mode = install_direct;
-    } else if (selected_mode == install_direct) {
-        selected_mode = install_ticket;
-    } else if (selected_mode == install_ticket) {
-        selected_mode = make_cia;
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            nextMode = CConfig::Mode::INSTALL_CIA;
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            nextMode = CConfig::Mode::INSTALL_TICKET;
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            nextMode = CConfig::Mode::DOWNLOAD_CIA;
+        break;
     }
     
-    if ( (selected_mode == install_ticket) || (selected_mode == install_direct) )
+    if (nextMode == CConfig::Mode::INSTALL_TICKET || nextMode == CConfig::Mode::INSTALL_CIA)
     {
         if (!bSvcHaxAvailable)
         {
-            selected_mode = make_cia;
+            nextMode = CConfig::Mode::DOWNLOAD_CIA;
             printf(CONSOLE_RED "Kernel access not available.\nCan't enable Install modes.\nYou can only make a CIA.\n" CONSOLE_RESET);
             wait_key_specific("\nPress A to continue.", KEY_A);
         }
     }
+
+    config.SetMode(nextMode);
 }
 
 void action_toggle_region()
 {
     consoleClear();
+    std::string regionFilter = config.GetRegionFilter();
     if(regionFilter == "off") {
         regionFilter = "ALL";
     } else if (regionFilter == "ALL") {
@@ -772,10 +804,9 @@ void action_toggle_region()
     } else if (regionFilter == "USA") {
         regionFilter = "JPN";
     } else if (regionFilter == "JPN") {
-        regionFilter = "---";
-    } else if (regionFilter == "---") {
         regionFilter = "off";
     }
+    config.SetRegionFilter(regionFilter);
 }
 
 void action_about()
@@ -879,18 +910,21 @@ void menu_main()
     while (!bExit && aptMainLoop())
     {
         std::string mode_text;
-        if(selected_mode == make_cia) {
-            mode_text = "Create CIA";
-        }
-        else if (selected_mode == install_direct) {
-            mode_text = "Install CIA";
-        }
-        else if (selected_mode == install_ticket) {
-            mode_text = "Create Ticket";
+        switch (config.GetMode())
+        {
+            case CConfig::Mode::DOWNLOAD_CIA:
+                mode_text = "Create CIA";
+            break;
+            case CConfig::Mode::INSTALL_CIA:
+                mode_text = "Install CIA";
+            break;
+            case CConfig::Mode::INSTALL_TICKET:
+                mode_text = "Create Ticket";
+            break;
         }
 
         // We have to update the footer every draw, incase the user switches install mode or region
-        sprintf(footer, "Mode (L):%s Region (R):%s Queue: %d", mode_text.c_str(), regionFilter.c_str(), game_queue.size());
+        sprintf(footer, "Mode (L):%s Region (R):%s Queue: %d", mode_text.c_str(), config.GetRegionFilter().c_str(), game_queue.size());
 
         menu_multkey_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options, NULL, menu_main_keypress);
 
@@ -939,6 +973,7 @@ int main(int argc, const char* argv[])
     // Make sure all CIAngel directories exists on the SD card
     mkpath("/CIAngel", 0777);
     mkpath("/CIAngel/tmp/", 0777);
+    loadConfig();
     
     // Set up the reading of json
     check_JSON();
