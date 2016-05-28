@@ -57,6 +57,14 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 		}
 	}
 
+	// Remove the ticket and title content, incase a bad one already exists on the system
+	AM_DeleteTitle(dest, titleId);
+	AM_DeleteTicket(titleId);
+
+	if(dest == MEDIATYPE_SD) {
+		AM_QueryAvailableExternalTitleDatabase(NULL);
+	}
+
 	res = AM_StartCiaInstall(dest, &handle);
 	if (R_FAILED(res))
 	{
