@@ -5,163 +5,117 @@
 #include <fstream>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <malloc.h>
 
+#include <typeinfo>
+#include <cmath>
+#include <numeric>
+#include <iterator>
+#include <algorithm>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <hbkb.h>
 
 #include <3ds.h>
 
+#include "config.h"
+#include "menu.h"
 #include "utils.h"
 #include "cia.h"
+#include "data.h"
+#include "types.h"
 
-#include "builtin_rootca_der.h"
+#include "svchax/svchax.h"
+#include "json/json.h"
+#include "fts_fuzzy_match.h"
+#include "utf8proc/utf8proc.h"
 
+static const u16 top = 0x140;
+static bool bSvcHaxAvailable = true;
+static bool bExit = false;
+int sourceDataType;
+Json::Value sourceData;
 
-static const std::string NUS_URL = "http://nus.cdn.c.shop.nintendowifi.net/ccs/download/";
-static const std::string YLS8_URL = "https://yls8.mtheall.com/ninupdates/titlelist.php?";
+CConfig config;
 
-typedef enum
-{
-    SYS_CTR = 0,
-    SYS_KTR
-} SystemType;
-
-typedef enum
-{
-    REG_USA = 0,
-    REG_JPN,
-    REG_EUR,
-    REG_KOR,
-    REG_TWN,
-} SystemRegion;
-
-std::string GetSystemString(int sys)
-{
-    switch (sys)
-    {
-        case SYS_CTR: return "ctr";
-        case SYS_KTR: return "ktr";
+struct find_game_item {
+    std::string titleid;
+    find_game_item(std::string titleid) : titleid(titleid) {}
+    bool operator () ( const game_item& gi ) const {
+        return gi.titleid == titleid;
     }
+};
 
-    return "";
+// Vector used for download queue
+std::vector<game_item> game_queue;
+
+bool compareByScore(const game_item &a, const game_item &b)
+{
+    return a.score > b.score;
 }
 
-std::string GetRegionString(int reg)
+Result ProcessCIA(std::string dir, std::string titleName)
 {
-    switch (reg)
+    FILE *tik = fopen((dir + "/ticket").c_str(), "rb");
+    if (!tik) 
     {
-        case REG_USA: return "e";
-        case REG_JPN: return "j";
-        case REG_EUR: return "p";
-        case REG_KOR: return "k";
-        case REG_TWN: return "t";
-    }
-
-    return "";
-}
-
-bool FileExists (std::string name) {
-    struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
-}
-
-Result DownloadFile(std::string url, std::ofstream &os)
-{
-    httpcContext context;
-    u32 fileSize = 0;
-    Result ret = 0;
-    u32 status;
-
-    httpcOpenContext(&context, HTTPC_METHOD_GET, (char *)url.c_str(), 1);
-
-    ret = httpcBeginRequest(&context);
-    if (ret != 0) goto _out;
-
-    ret = httpcGetResponseStatusCode(&context, &status, 0);
-    if (ret != 0) goto _out;
-
-    if (status != 200)
-    {
-        ret = status;
-        goto _out;
-    }
-
-    ret = httpcGetDownloadSizeState(&context, NULL, &fileSize);
-    if (ret != 0) goto _out;
-
-    {
-        unsigned char *buffer = (unsigned char *)linearAlloc(fileSize);
-        memset(buffer, 0, fileSize);
-
-        ret = httpcDownloadData(&context, buffer, fileSize, NULL);
-        if (ret != 0)
-        {
-            linearFree(buffer);
-            goto _out;
-        }
-
-        os.write((char *)buffer, fileSize);
-        linearFree(buffer);
-    }
-_out:
-    httpcCloseContext(&context);
-
-    return ret;
-}
-
-Result ConvertToCIA(std::string dir, std::string titleId)
-{
-    char cwd[1024];
-    if (getcwdir(cwd, sizeof(cwd)) == NULL){
-        printf("[!] Could not store Current Working Directory\n");
         return -1;
     }
-    chdir(dir.c_str());
-    FILE *tik = fopen("cetk", "rb");
-    if (!tik) return -1;
     TIK_CONTEXT tik_context = process_tik(tik);
 
     FILE *tmd = fopen((dir + "/tmd").c_str(),"rb");
-    if (!tmd) return -1;
+    if (!tmd) 
+    {
+        fclose(tik);
+        return -1;
+    }
     TMD_CONTEXT tmd_context = process_tmd(tmd);
 
     if(tik_context.result != 0 || tmd_context.result != 0){
         printf("[!] Input files could not be processed successfully\n");
         free(tmd_context.content_struct);
-        free(tmd_context.content);
         fclose(tik);
         fclose(tmd);
         return -1;
     }
-    //TID comparison check
-    if(check_tid(tik_context.title_id,tmd_context.title_id) != 1){
-        printf("[!] Caution, Ticket and TMD Title IDs do not match\n");
-        printf("[!] CETK Title ID:  "); u8_hex_print_be(tik_context.title_id,0x8); printf("\n");
-        printf("[!] TMD Title ID:   "); u8_hex_print_be(tmd_context.title_id,0x8); printf("\n");
+
+    int result;
+    if (config.GetMode() == CConfig::Mode::INSTALL_CIA)
+    {
+        result = install_cia(tmd_context, tik_context);
     }
-    //Title Version comparison
-    if(tik_context.title_version != tmd_context.title_version){
-        printf("[!] Caution, Ticket and TMD Title Versions do not match\n");
-        printf("[!] CETK Title Ver: %d\n",tik_context.title_version);
-        printf("[!] TMD Title Ver:  %d\n",tmd_context.title_version);
+    else
+    {
+        FILE *output = fopen((dir + "/" + titleName + ".cia").c_str(),"wb");
+        if (!output) 
+        {
+            result = -2;
+        }
+        else
+        {
+            result = generate_cia(tmd_context, tik_context, output);
+            if(result != 0)
+            {
+                remove((dir + "/" + titleName + ".cia").c_str());
+            }
+        }
     }
 
-    chdir(cwd);
+    // free allocated memory/handles
+    free(tmd_context.content_struct);
+    fclose(tik);
+    fclose(tmd);
 
-    FILE *output = fopen((dir + "/" + titleId + ".cia").c_str(),"wb");
-    if (!output) return -2;
-
-    int result = generate_cia(tmd_context,tik_context,output);
-    if(result != 0){
-        remove((dir + "/" + titleId + ".cia").c_str());
-    }
-
+    // Clean up temp files
+    remove((dir + "/ticket").c_str());
+    remove((dir + "/tmd").c_str());
     return result;
 }
 
@@ -194,533 +148,955 @@ int mkpath(std::string s,mode_t mode)
     return mdret;
 }
 
-template < typename T > std::string to_string( const T& n )
+char parse_hex(char c)
 {
-    std::ostringstream stm ;
-    stm << n ;
-    return stm.str() ;
+    if ('0' <= c && c <= '9') return c - '0';
+    if ('A' <= c && c <= 'F') return c - 'A' + 10;
+    if ('a' <= c && c <= 'f') return c - 'a' + 10;
+    std::abort();
 }
 
-Result DownloadTitle(std::string titleId, std::string version, std::string outputDir)
+char* parse_string(const std::string & s)
 {
-    mkpath((outputDir + "/tmp/").c_str(), 0777);
-    if (FileExists(outputDir + "/" + titleId + ".cia")) return 0;
+    char* buffer = new char[s.size() / 2];
+    for (std::size_t i = 0; i != s.size() / 2; ++i)
+        buffer[i] = 16 * parse_hex(s[2 * i]) + parse_hex(s[2 * i + 1]);
+    return buffer;
+}
+
+std::string get_file_contents(const char *filename)
+{
+  std::ifstream in(filename, std::ios::in | std::ios::binary);
+  if (in)
+  {
+    return(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+  }
+  throw(errno);
+}
+
+void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersion, std::string outputFullPath)
+{
     std::ofstream ofs;
-    ofs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    Result res = DownloadFile(NUS_URL + titleId + "/tmd." + version, ofs);
-    if (res != 0)
-    {
-        ofs.close();
-        return res;
-    }
+
+    ofs.open(outputFullPath, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    ofs.write(tikTemp, TICKET_SIZE);
     ofs.close();
 
-    u16 numContents = 0;
-    std::ifstream tmdfs;
-    tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::in | std::ofstream::binary);
-    tmdfs.seekg(518, std::ios::beg);
-    tmdfs.read((char *)&numContents, 2);
-    numContents = __builtin_bswap16(numContents);
-    for (u16 i = 0; i <= numContents; ++i)
+    ofs.open(outputFullPath, std::ofstream::out | std::ofstream::in | std::ofstream::binary);
+
+    //write version
+    ofs.seekp(top+0xA6, std::ios::beg);
+    ofs.write(titleVersion, 0x2);
+
+    //write title id
+    char* nTitleID = parse_string(titleId);
+    ofs.seekp(top+0x9C, std::ios::beg);
+    ofs.write(nTitleID, 0x8);
+    free(nTitleID);
+
+    //write key
+    char* nTitleKey = parse_string(encTitleKey);
+    ofs.seekp(top+0x7F, std::ios::beg);
+    ofs.write(nTitleKey, 0x10);
+    free(nTitleKey);
+
+    ofs.close();
+}
+
+void InstallTicket(std::string FullPath, std::string TitleId)
+{
+    Handle hTik;
+    u32 writtenbyte;
+    std::string curr = get_file_contents(FullPath.c_str());
+
+    // Remove the ticket incase there was a bad one previously installed
+    char* nTitleId = parse_string(TitleId);
+    u64 titleId = u8_to_u64((u8*)nTitleId, BIG_ENDIAN);
+    free (nTitleId);
+    AM_DeleteTicket(titleId);
+
+    // Install new ticket
+    AM_InstallTicketBegin(&hTik);
+    FSFILE_Write(hTik, &writtenbyte, 0, curr.c_str(), 0x100000, 0);
+    AM_InstallTicketFinish(hTik);
+    printf("Ticket Installed.");
+    //delete temp ticket, ticket folder still exists... ugly. later stream directly to the handle
+    remove(FullPath.c_str());
+}
+
+Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName, std::string region)
+{
+    // Convert the titleid to a u64 for later use
+    char* nTitleId = parse_string(titleId);
+    u64 uTitleId = u8_to_u64((u8*)nTitleId, BIG_ENDIAN);
+    free (nTitleId);
+
+    // Wait for wifi to be available
+    u32 wifi = 0;
+    Result ret = 0;
+    Result res = 0;
+    while(R_SUCCEEDED(ret = ACU_GetWifiStatus(&wifi)) && wifi == 0)
     {
-        int offset = 2820 + (48 * (i - 1));
-        tmdfs.seekg(offset, std::ios::beg);
-        u32 cid = 0;
-        tmdfs.read((char *)&cid, 4);
-        std::string contentId = u32_to_hex_string(__builtin_bswap32(cid));
-        ofs = std::ofstream();
-        ofs.open(outputDir + "/tmp/" + contentId, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-        Result res = DownloadFile(NUS_URL + titleId + "/" + contentId, ofs);
-        ofs.close();
-        if (res != 0)
+        hidScanInput();
+        if (hidKeysDown() & KEY_B)
         {
-            return res;
+            ret = -1;
+            break;
         }
     }
-    tmdfs.close();
 
-    ofs.open(outputDir + "/tmp/cetk", std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    res = DownloadFile(NUS_URL + titleId + "/cetk", ofs);
-    ofs.close();
-
-    ConvertToCIA(outputDir + "/tmp", titleId);
-
-    rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
-
-    // TODO remove tmp dir
-
-    return res;
-}
-
-Result network_request(char *hostname, char *http_netreq, std::ofstream &ofs)
-{
-    Result ret=0;
-
-    struct addrinfo hints;
-    struct addrinfo *resaddr = NULL, *resaddr_cur;
-    int sockfd;
-    u8 *readbuf = (u8 *)linearAlloc(0x400);
-
-    sslcContext sslc_context;
-    u32 RootCertChain_contexthandle=0;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd==-1)
+    if (R_FAILED(ret))
     {
-        printf("Failed to create the socket.\n");
-        return -1;
-    }
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if(getaddrinfo(hostname, "443", &hints, &resaddr)!=0)
-    {
-        printf("getaddrinfo() failed.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    for(resaddr_cur = resaddr; resaddr_cur!=NULL; resaddr_cur = resaddr_cur->ai_next)
-    {
-        if(connect(sockfd, resaddr_cur->ai_addr, resaddr_cur->ai_addrlen)==0)break;
-    }
-
-    freeaddrinfo(resaddr);
-
-    if(resaddr_cur==NULL)
-    {
-        printf("Failed to connect.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    ret = sslcCreateRootCertChain(&RootCertChain_contexthandle);
-    if(R_FAILED(ret))
-    {
-        printf("sslcCreateRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
+        printf("Unable to access internet.\n");
         return ret;
     }
 
-    ret = sslcAddTrustedRootCA(RootCertChain_contexthandle, (u8*)builtin_rootca_der, builtin_rootca_der_size, NULL);
-    if(R_FAILED(ret))
+    std::string outputDir = "/CIAngel";
+
+    if (titleName.length() == 0)
     {
-        printf("sslcAddTrustedRootCA() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
+        titleName = titleId;
     }
 
-    ret = sslcCreateContext(&sslc_context, sockfd, SSLCOPT_Default, hostname);
-    if(R_FAILED(ret))
+    // Include region in filename
+    if (region.length() > 0)
     {
-        printf("sslcCreateContext() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
+        titleName = titleName + " (" + region + ")";
     }
 
-    ret = sslcContextSetRootCertChain(&sslc_context, RootCertChain_contexthandle);
-    if(R_FAILED(ret))
+    std::string mode_text;
+    if(config.GetMode() == CConfig::Mode::DOWNLOAD_CIA)
     {
-        printf("sslcContextSetRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
+        mode_text = "create";
+    }
+    else if(config.GetMode() == CConfig::Mode::INSTALL_CIA)
+    {
+        mode_text = "install";
     }
 
-    ret = sslcStartConnection(&sslc_context, NULL, NULL);
-    if(R_FAILED(ret))
+
+    printf("Starting - %s\n", titleName.c_str());
+
+    // If in install mode, download/install the SEED entry
+    if (config.GetMode() == CConfig::Mode::INSTALL_CIA)
     {
-        printf("sslcStartConnection() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
+        // Download and install the SEEDDB entry if install mode
+        // Code based on code from FBI: https://github.com/Steveice10/FBI/blob/master/source/core/util.c#L254
+        // Copyright (C) 2015 Steveice10
+        u8 seed[16];
+        static const char* regionStrings[] = {"JP", "US", "GB", "GB", "HK", "KR", "TW"};
+        u8 region = CFG_REGION_USA;
+        CFGU_GetSystemLanguage(&region);
 
-    ret = sslcWrite(&sslc_context, (u8*)http_netreq, strlen(http_netreq));
-    if(R_FAILED(ret))
-    {
-        printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
+        if(region <= CFG_REGION_TWN) {
+            char url[128];
+            snprintf(url, 128, SEED_URL "0x%016llX/ext_key?country=%s", uTitleId, regionStrings[region]);
 
-    memset(readbuf, 0, 0x400);
-    sslcRead(&sslc_context, readbuf, 204, false); // discard HTTP header
+            httpcContext context;
+            if(R_SUCCEEDED(res = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1))) {
+                httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 
-    while ((ret = sslcRead(&sslc_context, readbuf, 0x400-1, false)) > 0)
-    {
-        if(R_FAILED(ret))
-        {
-            printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-            sslcDestroyContext(&sslc_context);
-            sslcDestroyRootCertChain(RootCertChain_contexthandle);
-            closesocket(sockfd);
-            return ret;
-        }
-
-        ofs.write((const char *)readbuf, ret);
-    }
-    
-    sslcDestroyContext(&sslc_context);
-    sslcDestroyRootCertChain(RootCertChain_contexthandle);
-    
-    closesocket(sockfd);
-
-    return 0;
-}
-
-Result DownloadFileSecure(std::string url, std::ofstream &ofs)
-{
-    std::string page = url.substr(url.find(".com/") + 4);
-    size_t len = url.find(".com") + 4 - (url.find("://") + 3);
-    std::string hostname = url.substr(url.find("://") + 3, len);
-    std::string req = "GET " + page + " HTTP/1.1\r\nUser-Agent: FirmwareDownloader\r\nConnection: close\r\nHost: " + hostname + "\r\n\r\n";
-    return network_request((char *)hostname.c_str(), (char *)req.c_str(), ofs);
-}
-
-Result DownloadCSV(std::string sys, std::string reg, std::string outputDir)
-{
-    mkpath(outputDir, 0777);
-    std::ofstream ofs;
-    ofs.open((outputDir + "/" + sys + "_" + reg + ".csv").c_str(), std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    Result res = DownloadFileSecure(YLS8_URL + "sys=" + sys + "&csv=1" + "&reg=" + reg, ofs);
-    ofs.close();
-    if (res != 0) remove((outputDir + "/" + sys + "_" + reg + ".csv").c_str());
-    return res;
-}
-
-Result CheckCSVFiles(std::string dir)
-{
-    for (int sys = SYS_CTR; sys <= SYS_KTR; ++sys)
-    {
-        for (int reg = REG_USA; reg <= REG_TWN; ++reg)
-        {
-            if (!FileExists(dir + "/" + GetSystemString(sys) + "_" + GetRegionString(reg) + ".csv"))
-            {
-                printf("Downloading CSV for system/region:%s/%s...", GetSystemString(sys).c_str(), GetRegionString(reg).c_str());
-                Result res = DownloadCSV(GetSystemString(sys), GetRegionString(reg), dir);
-                if (res != 0)
-                {
-                    printf("error downloading CSV: %ld\n", res);
-                    return res;
+                u32 responseCode = 0;
+                if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode, 0))) {
+                    if(responseCode == 200) {
+                        u32 pos = 0;
+                        u32 bytesRead = 0;
+                        while(pos < sizeof(seed) && (R_SUCCEEDED(res = httpcDownloadData(&context, &seed[pos], sizeof(seed) - pos, &bytesRead)) || (u32)res == HTTPC_RESULTCODE_DOWNLOADPENDING)) {
+                            pos += bytesRead;
+                        }
+                    } else {
+                        res = -1;
+                    }
                 }
-                else
+
+                httpcCloseContext(&context);
+            }
+
+            if (R_SUCCEEDED(res))
+            {
+                res = InstallSeed(uTitleId, seed);
+                if (R_FAILED(res))
                 {
-                    printf("done\n");
+                    printf("Error installing SEEDDB entry: 0x%lx\n", res);
                 }
             }
         }
     }
 
-    return 0;
-}
-
-struct CSVEntry
-{
-    std::string titleId;
-    SystemRegion region;
-    std::vector<u32> titleVersions;
-    std::vector<u32> updateVersions;
-};
-
-std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
-    std::stringstream ss(s);
-    std::string item;
-    while (std::getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-
-
-std::vector<std::string> split(const std::string &s, char delim) {
-    std::vector<std::string> elems;
-    split(s, delim, elems);
-    return elems;
-}
-
-SystemRegion CSVGetRegionFromString(std::string reg)
-{
-    if (reg.compare("USA") == 0) return REG_USA;
-    if (reg.compare("JPN") == 0) return REG_JPN;
-    if (reg.compare("EUR") == 0) return REG_EUR;
-    if (reg.compare("KOR") == 0) return REG_KOR;
-    if (reg.compare("TWN") == 0) return REG_TWN;
-
-    return (SystemRegion)-1;
-}
-
-std::vector<u32> ParseCSVTitleVersions(std::string vstr)
-{
-    std::vector<std::string> tokens = split(vstr, ' ');
-    std::vector<u32> versions;
-    for (std::string token : tokens)
+    // Make sure the CIA doesn't already exist
+    std::string cp = outputDir + "/" + titleName + ".cia";
+    if (config.GetMode() == CConfig::Mode::DOWNLOAD_CIA && FileExists(cp.c_str()))
     {
-        versions.push_back(strtoul(token.substr(1).c_str(), nullptr, 10));
+        printf("%s already exists.\n", cp.c_str());
+        return 0;
     }
-    return versions;
+
+    std::ofstream ofs;
+
+    FILE *oh = fopen((outputDir + "/tmp/tmd").c_str(), "wb");
+    if (!oh) 
+    {
+        printf("Error opening %s/tmp/tmd\n", outputDir.c_str());
+        return -1;
+    }
+    res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
+    fclose(oh);
+    if (res != 0)
+    {
+        printf("Could not download TMD. Internet/Title ID is OK?\n");
+        return res;
+    }
+
+    // Read version
+    std::ifstream tmdfs;
+    tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
+    char titleVersion[2];
+    tmdfs.seekg(top+0x9C, std::ios::beg);
+    tmdfs.read(titleVersion, 0x2);
+    tmdfs.close();
+
+    CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/ticket");
+
+    printf("Now %s the CIA...\n", mode_text.c_str());
+
+    res = ProcessCIA(outputDir + "/tmp", titleName);
+    if (res != 0)
+    {
+        printf("Could not %s the CIA.\n", mode_text.c_str());
+        return res;
+    }
+
+    if (config.GetMode() == CConfig::Mode::DOWNLOAD_CIA)
+    {
+        rename((outputDir + "/tmp/" + titleName + ".cia").c_str(), (outputDir + "/" + titleName + ".cia").c_str());
+    }
+
+    printf(" DONE!\n");
+
+    return res;
 }
 
-std::vector<u32> ParseCSVUpdateVersions(std::string ustr)
+void ProcessGameQueue()
 {
-    std::vector<std::string> tokens = split(ustr, ' ');
-    std::vector<u32> versions;
-    for (std::string token : tokens)
+    // Create the tickets folder if we're in ticket mode
+    char empty_titleVersion[2] = {0x00, 0x00};
+
+    std::vector<game_item>::iterator game = game_queue.begin();
+    while(aptMainLoop() && game != game_queue.end())
     {
-        if (token.find_first_of('.') == std::string::npos) continue;
-        std::string versionstr = token.substr(0, token.find_first_of('-'));
-        while (versionstr.find_first_of('.') != std::string::npos)
+        std::string selected_titleid = (*game).titleid;
+        std::string selected_enckey = (*game).titlekey;
+        std::string selected_name = (*game).name;
+        std::string selected_region = (*game).region;
+
+        if (config.GetMode() == CConfig::Mode::INSTALL_TICKET)
         {
-            versionstr.replace(versionstr.find_first_of('.'), 1, std::string(""));
-        }
-        versions.push_back(strtoul(versionstr.c_str(), nullptr, 10));
-    }
-    return versions;
-}
-
-u32 GetVersionCodeFromString(std::string str)
-{
-    std::string versionstr = str.substr(0, str.find_first_of('-'));
-    while (versionstr.find_first_of('.') != std::string::npos)
-    {
-        versionstr.replace(versionstr.find_first_of('.'), 1, std::string(""));
-    }
-    return strtoul(versionstr.c_str(), nullptr, 10);
-}
-
-std::vector<CSVEntry> ParseCSVEntries(std::string &csv)
-{
-    std::istringstream ss;
-    ss.str(csv);
-    std::vector<CSVEntry> entries;
-    std::string line;
-    std::getline(ss, line);
-    for (; std::getline(ss, line); )
-    {
-        if (line.compare("") == 0) continue;
-        CSVEntry entry;
-        std::vector<std::string> tokens = split(line, ',');
-        if (tokens.size() < 4) continue;
-        entry.titleId = tokens.at(0);
-        entry.region = CSVGetRegionFromString(tokens.at(1));
-        entry.titleVersions = ParseCSVTitleVersions(tokens.at(2));
-        entry.updateVersions = ParseCSVUpdateVersions(tokens.at(3));
-        entries.push_back(entry);
-    }
-    return entries;
-}
-
-std::vector<CSVEntry> LoadCSV(std::string path)
-{
-    std::ifstream t(path);
-    std::string str;
-
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-
-    str.assign((std::istreambuf_iterator<char>(t)),
-               std::istreambuf_iterator<char>());
-    t.close();
-    return ParseCSVEntries(str);
-}
-
-Result DownloadFirmware(SystemType sys, SystemRegion reg, std::string versionStr, std::string dir)
-{
-    std::vector<CSVEntry> entries = LoadCSV(dir + "/" + GetSystemString(sys) +"_" + GetRegionString(reg) + ".csv");
-    std::string vstrdir = versionStr;
-    while (vstrdir.find_first_of('.') != std::string::npos)
-    {
-        vstrdir.replace(vstrdir.find_first_of('.'), 1, std::string("_"));
-    }
-    std::string updatePath = dir + "/updates/" + GetSystemString(sys) +"_" + GetRegionString(reg) + "/" + vstrdir;
-    mkpath(updatePath, 0777);
-    u32 vcode = GetVersionCodeFromString(versionStr);
-    for (CSVEntry entry : entries)
-    {
-        u32 titleVersionIndex = 0;
-        for (size_t i = 0; i < entry.updateVersions.size(); ++i)
-        {
-            u32 code = entry.updateVersions.at(i);
-            if (code <= vcode) titleVersionIndex = i;
-        }
-        printf("%s:v%lu...", entry.titleId.c_str(), entry.titleVersions.at(titleVersionIndex));
-        Result res = DownloadTitle(entry.titleId, to_string(entry.titleVersions.at(titleVersionIndex)), updatePath);
-        if (res != 0)
-        {
-            printf("error:%ld\n", res);
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
+            InstallTicket("/CIAngel/tmp/ticket", selected_titleid);
         }
         else
         {
-            printf("OK!\n");
+            Result res = DownloadTitle(selected_titleid, selected_enckey, selected_name, selected_region);
+            if (R_FAILED(res)) {
+                printf("Error processing queue. Returning to menu\n");
+                break;
+            }
+        }
+
+        game = game_queue.erase(game);
+    }
+
+    wait_key_specific("Press A to continue.\n", KEY_A);
+}
+
+std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
+{
+    sHBKB->HBKB_Clean();
+    touchPosition touch;
+    u8 KBState = 4;
+    std::string input;
+    while (KBState != 1 || input.length() == 0)
+    {
+        if (!aptMainLoop())
+        {
+            bCancelled = true;
+            break;
+        }
+
+        hidScanInput();
+        hidTouchRead(&touch);
+        KBState = sHBKB->HBKB_CallKeyboard(touch);
+        input = sHBKB->HBKB_CheckKeyboardInput();
+
+        // If the user cancelled the input
+        if (KBState == 3)
+        {
+            bCancelled = true;
+            break;
+        }
+        // Otherwise if the user has entered a key
+        else if (KBState != 4)
+        {
+            printf("%c[2K\r", 27);
+
+            // If input string is > 50 characters, show just the right hand side
+            if (input.length() > 49)
+            {
+                printf("%s", input.substr(input.length() - 49).c_str());
+            }
+            else
+            {
+                printf("%s", input.c_str());
+            }
+        }
+
+        // Flush and swap framebuffers
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+
+        //Wait for VBlank
+        gspWaitForVBlank();
+    }
+    printf("\n");
+    return input;
+}
+
+void removeForbiddenChar(std::string* s)
+{
+    std::string::iterator it;
+    std::string illegalChars = "\\/:?\"<>|";
+    for (it = s->begin() ; it < s->end() ; ++it){
+        bool found = illegalChars.find(*it) != std::string::npos;
+        if(found)
+        {
+            *it = ' ';
+        }
+    }
+}
+
+std::istream& GetLine(std::istream& is, std::string& t)
+{
+    t.clear();
+    std::istream::sentry se(is, true);
+    std::streambuf* sb = is.rdbuf();
+
+    for (;;) {
+        int c = sb->sbumpc();
+        switch (c) {
+            case '\n':
+              return is;
+            case '\r':
+              if (sb->sgetc() == '\n')
+                sb->sbumpc();
+              return is;
+            case  EOF:
+              if (t.empty())
+                is.setstate(std::ios::eofbit);
+              return is;
+            default:
+              t += (char)c;
+        }
+    }
+}
+
+std::string ToHex(const std::string& s)
+{
+    std::ostringstream ret;
+    for (std::string::size_type i = 0; i < s.length(); ++i)
+    {
+        int z = s[i]&0xff;
+        ret << std::hex << std::setfill('0') << std::setw(2) << z;
+    }
+    return ret.str();
+}
+
+void load_JSON_data() 
+{
+    printf("loading wings.json...\n");
+    std::ifstream ifs("/CIAngel/wings.json");
+    Json::Reader reader;
+    Json::Value obj;
+    reader.parse(ifs, obj);
+    sourceData = obj; // array of characters
+    
+    if(sourceData[0]["titleID"].isString()) {
+      sourceDataType = JSON_TYPE_ONLINE;
+    } else if (sourceData[0]["titleid"].isString()) {
+      sourceDataType = JSON_TYPE_WINGS;
+    }
+}
+
+void loadConfig()
+{
+    // Load config, and force mode to DOWNLOAD_CIA if svcHax not available, then resave
+    config.LoadConfig("/CIAngel/config.json");
+    if (!bSvcHaxAvailable)
+    {
+        config.SetMode(CConfig::Mode::DOWNLOAD_CIA);
+    }
+    config.SaveConfig();
+}
+
+// Search menu keypress callback
+bool menu_search_keypress(int selected, u32 key, void* data)
+{
+    std::vector<game_item>* cb_data = (std::vector<game_item>*)data;
+
+    // If key is 0, it means aptMainLoop() returned false, so we're exiting
+    // Go back to the previous menu which will handle quitting
+    if (!key) {
+        return true;
+    }
+
+    // B goes back a screen
+    if (key & KEY_B)
+    {
+        return true;
+    }
+
+    // A triggers the default action on the selected title
+    if (key & KEY_A)
+    {
+        // Clean up the console since we'll be using it
+        consoleClear();
+
+        // Fetch the title data and start downloading
+        std::string selected_titleid = (*cb_data)[selected].titleid;
+        std::string selected_enckey = (*cb_data)[selected].titlekey;
+        std::string selected_name = (*cb_data)[selected].name;
+        std::string selected_region = (*cb_data)[selected].region;
+
+        printf("OK - %s\n", selected_name.c_str());
+        //removes any problem chars, not sure if whitespace is a problem too...?
+        removeForbiddenChar(&selected_name);
+
+        if(config.GetMode() == CConfig::Mode::INSTALL_TICKET)
+        {
+            char empty_titleVersion[2] = {0x00, 0x00};
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
+            InstallTicket("/CIAngel/tmp/ticket", selected_titleid);
+        }
+        else
+        {
+            DownloadTitle(selected_titleid, selected_enckey, selected_name, selected_region);
+        }
+
+        wait_key_specific("\nPress A to continue.\n", KEY_A);
+        return true;
+    }
+
+    // X triggers adding items to the download queue
+    if (key & KEY_X)
+    {
+        consoleClear();
+        std::string titleid = (*cb_data)[selected].titleid;
+        if (std::find_if(game_queue.begin(), game_queue.end(), find_game_item(titleid)) == game_queue.end())
+        {
+            game_queue.push_back((*cb_data)[selected]);
+
+            printf("Game added to queue.\n");
+        }
+        else
+        {
+            printf("Game already in queue.\n");
+        }
+
+        printf("Queue size: %d\n", game_queue.size());
+        wait_key_specific("\nPress A to continue.\n", KEY_A);
+
+        return true;
+    }
+
+    return false;
+}
+
+/* Search filter functions */
+// Fuzzy match based on the game name
+bool search_by_name(std::string &searchString, Json::Value &gameData, int &outScore)
+{
+    return fts::fuzzy_match(searchString.c_str(), gameData["ascii_name"].asCString(), outScore);
+}
+
+// Wildcard match based on game serial
+bool search_by_serial(std::string &searchString, Json::Value &gameData, int &outScore)
+{
+    if (sourceDataType == JSON_TYPE_WINGS) 
+    {
+        return (upperCase(gameData["code"].asString()).find(upperCase(searchString)) != std::string::npos);
+    }
+    else
+    {
+        return (upperCase(gameData["serial"].asString()).find(upperCase(searchString)) != std::string::npos);
+    }
+}
+
+/* Menu Action Functions */
+void action_search(bool (*match)(std::string &searchString, Json::Value &gameData, int &outScore))
+{
+    HB_Keyboard sHBKB;
+    bool bKBCancelled = false;
+
+    consoleClear();
+
+    printf("Please enter text to search for:\n");
+    std::string searchString = getInput(&sHBKB, bKBCancelled);
+    if (bKBCancelled)
+    {
+        return;
+    }
+
+    // User has entered their input, so let's scrap the keyboard
+    clear_screen(GFX_BOTTOM);
+
+    std::vector<game_item> display_output;
+    int outScore;
+    
+    for (unsigned int i = 0; i < sourceData.size(); i++) {
+        // Check the region filter
+        std::string regionFilter = config.GetRegionFilter();
+        if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+            continue;
+        }
+
+        // Check that the encTitleKey isn't null
+        if (sourceData[i]["encTitleKey"].isNull())
+        {
+            continue;
+        }
+
+        // Create an ASCII version of the name if one doesn't exist yet
+        if (sourceData[i]["ascii_name"].isNull())
+        {
+            // Normalize the name down to ASCII
+            utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
+            utf8proc_uint8_t* szName;
+            utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
+            utf8proc_map(str, 0, &szName, options);
+
+            sourceData[i]["ascii_name"] = (const char*)szName;
+
+            free(szName);
+        }
+
+        if (match(searchString, sourceData[i], outScore))
+        {
+
+            game_item item;
+            item.score = outScore;
+            item.index = i;
+
+            switch(sourceDataType) {
+            case JSON_TYPE_WINGS:
+              item.titleid = sourceData[i]["titleid"].asString();
+              item.titlekey = sourceData[i]["enckey"].asString();
+              item.name = sourceData[i]["ascii_name"].asString();
+              item.region = sourceData[i]["region"].asString();
+              item.code = sourceData[i]["code"].asString();
+              break;
+            case JSON_TYPE_ONLINE:
+              item.titleid = sourceData[i]["titleID"].asString();
+              item.titlekey = sourceData[i]["encTitleKey"].asString();
+              item.name = sourceData[i]["ascii_name"].asString();
+              item.region = sourceData[i]["region"].asString();
+              item.code = sourceData[i]["serial"].asString();
+              break;
+            }
+
+            std::string typeCheck = item.titleid.substr(4,4);
+            //if title id belongs to gameapp/dlc/update/dsiware, use it. if not, ignore. case sensitve of course
+            if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
+                display_output.push_back(item);
+            }
         }
     }
 
-    return 0;
+    unsigned int display_amount = display_output.size();
+
+    // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
+
+    if (display_amount == 0)
+    {
+        printf("No matching titles found.\n");
+        wait_key_specific("\nPress A to return.\n", KEY_A);
+        return;
+    }
+
+    // sort similar names by fuzzy score
+    if(display_amount>1) {
+        std::sort(display_output.begin(), display_output.end(), compareByScore);
+    }
+    
+    std::string mode_text;
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            mode_text = "Create CIA";
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            mode_text = "Install CIA";
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            mode_text = "Create Ticket";
+        break;
+    }
+
+    char footer[51];
+    char header[51];
+    sprintf(header, "Select a Title (found %i results)", display_amount);
+    sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
+    titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
 }
 
-static const std::string FDFolder = "sdmc:/3ds/FirmwareDownloader";
-
-int main()
+void action_prompt_queue()
 {
+    consoleClear();
+
+    std::string mode_text;
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            mode_text = "download";
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            mode_text = "install";
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            mode_text = "create tickets for";
+        break;
+    }
+
+    printf("Queue contains %d items.\n", game_queue.size());
+    printf("Press A to %s queue.\n", mode_text.c_str());
+    printf("Press B to return to menu.\n");
+    printf("Press X to clear queue.\n");
+
+    while (aptMainLoop())
+    {
+        u32 key = wait_key();
+        if (key & KEY_B)
+        {
+            break;
+        }
+
+        if (key & KEY_X)
+        {
+            game_queue.clear();
+            break;
+        }
+
+        if (key & KEY_A)
+        {
+            ProcessGameQueue();
+            break;
+        }
+    }
+
+}
+
+void action_manual_entry()
+{
+    HB_Keyboard sHBKB;
+    bool bKBCancelled = false;
+
+    consoleClear();
+
+    // Keep looping so the user can retry if they enter a bad id/key
+    while(true)
+    {
+        printf("Please enter a titleID:\n");
+        std::string titleId = getInput(&sHBKB, bKBCancelled);
+        std::string key;
+        if (bKBCancelled)
+        {
+            break;
+        }
+
+        for (unsigned int i = 0; i < sourceData.size(); i++){
+            std::string tempId = sourceData[i]["titleid"].asString();
+            std::string tempKey = sourceData[i]["enckey"].asString();
+
+            if(tempId.compare(titleId) == 0 && tempKey.length() == 32) {
+               printf("Found encTitleKey, proceeding automatically\n"); 
+               key = tempKey;
+               break;
+            }
+        }
+        if(key.length() != 32) {
+            printf("Please enter the corresponding encTitleKey:\n");
+            key = getInput(&sHBKB, bKBCancelled);
+            if (bKBCancelled)
+            {
+                break;
+            }
+        }
+        if (titleId.length() == 16 && key.length() == 32)
+        {
+            DownloadTitle(titleId, key, "", "");
+            wait_key_specific("\nPress A to continue.\n", KEY_A);
+            break;
+        }
+        else
+        {   
+            printf("There was an error in you input:\n");  
+            if(titleId.length() != 16) {
+                printf("titleIDs are 16 chars long, not %i\n", titleId.length());
+            }
+            if(key.length() != 32) {
+                printf("encTitleKeys are 32 chars long, not %i\n", key.length());
+            }
+        }
+    }
+}
+
+void action_input_txt()
+{
+    consoleClear();
+
+    std::ifstream input;
+    std::string titleId;
+    std::string key;
+
+    input.open("/CIAngel/input.txt", std::ofstream::in);
+    GetLine(input, titleId);
+    GetLine(input, key);
+    DownloadTitle(titleId, key, "", "");
+
+    wait_key_specific("\nPress A to continue.\n", KEY_A);
+}
+
+void action_toggle_install()
+{
+    consoleClear();
+    CConfig::Mode nextMode = CConfig::Mode::INSTALL_CIA;
+
+    switch (config.GetMode())
+    {
+        case CConfig::Mode::DOWNLOAD_CIA:
+            nextMode = CConfig::Mode::INSTALL_CIA;
+        break;
+        case CConfig::Mode::INSTALL_CIA:
+            nextMode = CConfig::Mode::INSTALL_TICKET;
+        break;
+        case CConfig::Mode::INSTALL_TICKET:
+            nextMode = CConfig::Mode::DOWNLOAD_CIA;
+        break;
+    }
+    
+    if (nextMode == CConfig::Mode::INSTALL_TICKET || nextMode == CConfig::Mode::INSTALL_CIA)
+    {
+        if (!bSvcHaxAvailable)
+        {
+            nextMode = CConfig::Mode::DOWNLOAD_CIA;
+            printf(CONSOLE_RED "Kernel access not available.\nCan't enable Install modes.\nYou can only make a CIA.\n" CONSOLE_RESET);
+            wait_key_specific("\nPress A to continue.", KEY_A);
+        }
+    }
+
+    config.SetMode(nextMode);
+}
+
+void action_toggle_region()
+{
+    consoleClear();
+    std::string regionFilter = config.GetRegionFilter();
+    if(regionFilter == "off") {
+        regionFilter = "ALL";
+    } else if (regionFilter == "ALL") {
+        regionFilter = "EUR";
+    } else if (regionFilter == "EUR") {
+        regionFilter = "USA";
+    } else if (regionFilter == "USA") {
+        regionFilter = "JPN";
+    } else if (regionFilter == "JPN") {
+        regionFilter = "off";
+    }
+    config.SetRegionFilter(regionFilter);
+}
+
+void action_about()
+{
+    consoleClear();
+
+    printf(CONSOLE_RED "CIAngel\n\n" CONSOLE_RESET);
+    printf("Download, create, and install CIAs directly\n");
+    printf("from Nintendo's CDN servers. Grabbing the\n");
+    printf("latest games has never been so easy.\n\n");
+
+    printf("Contributors: Cearp, Drakia, superbudvar,\n");
+    printf("              mysamdog, cerea1killer\n");
+
+    printf("\n\nCommit: " REVISION_STRING "\n\n");
+
+    printf("\nPress any button to continue.");
+    wait_key();
+}
+
+void action_exit()
+{
+    bExit = true;
+}
+
+void action_download_json()
+{
+    consoleClear();
+
+    download_JSON();
+    load_JSON_data();
+}
+
+// Main menu keypress callback
+bool menu_main_keypress(int selected, u32 key, void*)
+{
+    // If key is 0, it means aptMainLoop() returned false, so we're quitting
+    if (!key) {
+        return true;
+    }
+
+    // A button triggers standard actions
+    if (key & KEY_A)
+    {
+        switch (selected)
+        {
+            case 0:
+                action_search(search_by_name);
+            break;
+            case 1:
+                action_search(search_by_serial);
+            break;
+            case 2:
+                action_prompt_queue();
+            break;
+            case 3:
+                action_manual_entry();
+            break;
+            case 4:
+                action_input_txt();
+            break;
+            case 5:
+                action_download_json();
+            break;
+            case 6:
+                action_about();
+            break;
+            case 7:
+                action_exit();
+            break;
+        }
+        return true;
+    }
+    // L button triggers mode toggle
+    else if (key & KEY_L)
+    {
+        action_toggle_install();
+        return true;
+    }
+    // R button triggers region toggle
+    else if (key & KEY_R)
+    {
+        action_toggle_region();
+        return true;
+    }
+
+    return false;
+}
+
+// Draw the main menu
+void menu_main()
+{
+    const char *options[] = {
+        "Search for a title by name",
+        "Search for a title by serial",
+        "Process download queue",
+        "Enter a title key/ID pair",
+        "Fetch title key/ID from input.txt",
+        "Download wings.json",
+        "About CIAngel",
+        "Exit",
+    };
+    char footer[50];
+
+    while (!bExit && aptMainLoop())
+    {
+        std::string mode_text;
+        switch (config.GetMode())
+        {
+            case CConfig::Mode::DOWNLOAD_CIA:
+                mode_text = "Create CIA";
+            break;
+            case CConfig::Mode::INSTALL_CIA:
+                mode_text = "Install CIA";
+            break;
+            case CConfig::Mode::INSTALL_TICKET:
+                mode_text = "Create Ticket";
+            break;
+        }
+
+        // We have to update the footer every draw, incase the user switches install mode or region
+        sprintf(footer, "Mode (L):%s Region (R):%s Queue: %d", mode_text.c_str(), config.GetRegionFilter().c_str(), game_queue.size());
+
+        menu_multkey_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options, NULL, menu_main_keypress);
+
+        clear_screen(GFX_BOTTOM);
+    }
+}
+
+int main(int argc, const char* argv[])
+{
+    /* Sadly svchax crashes too much, so only allow install mode when running as a CIA
+    // Trigger svchax so we can install CIAs
+    if(argc > 0) {
+        svchax_init(true);
+        if(!__ctr_svchax || !__ctr_svchax_srv) {
+            bSvcHaxAvailable = false;
+            //printf("Failed to acquire kernel access. Install mode disabled.\n");
+        }
+    }
+    */
+    
+    // argc is 0 when running as a CIA, and 1 when running as a 3dsx
+    if (argc > 0)
+    {
+        bSvcHaxAvailable = false;
+    }
+
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
     gfxInitDefault();
+    consoleInit(GFX_TOP, NULL);
+
     httpcInit(0);
     soc_sharedmem = (u32 *)memalign(0x1000, soc_sharedmem_size);
     socInit(soc_sharedmem, soc_sharedmem_size);
     sslcInit(0);
     hidInit();
+    acInit();
+    cfguInit();
 
-    consoleInit(GFX_TOP, NULL);
-    printf("FirmwareDownloader by machinamentum\n");
-    CheckCSVFiles("sdmc:/3ds/FirmwareDownloader");
-
-    SystemType sys = SYS_CTR;
-    int reg = REG_USA;
-    int major = 9;
-    int minor = 0;
-    int fix = 0;
-
-    int chooseMode = 0;
-    bool refresh = true;
-
-    while (aptMainLoop())
+    if (bSvcHaxAvailable)
     {
-        hidScanInput();
-        if (refresh)
-        {
-            refresh = false;
-            printf("\x1b[10;0HChoose firmware:");
-            if (chooseMode == 0)
-            {
-                printf("\033[1;31m");
-            }
-            printf("%s \x1b[0m", (sys == SYS_KTR ? "New3DS" : "Old3DS"));
-            if (chooseMode == 1)
-            {
-                printf("\033[1;31m");
-            }
-            printf("%d\x1b[0m.", major);
-            if (chooseMode == 2)
-            {
-                printf("\033[1;31m");
-            }
-            printf("%d\x1b[0m.", minor);
-            if (chooseMode == 3)
-            {
-                printf("\033[1;31m");
-            }
-            printf("%d \x1b[0m", fix);
-            if (chooseMode == 4)
-            {
-                printf("\033[1;31m");
-            }
-            printf("%s\x1b[0m\n", GetRegionString((SystemRegion)reg).c_str());
-        }
-
-        u32 keys = hidKeysDown();
-        if (keys & (KEY_RIGHT | KEY_LEFT | KEY_UP | KEY_DOWN | KEY_A))
-        {
-            refresh = true;
-        }
-        if (keys & KEY_RIGHT)
-        {
-            chooseMode++;
-            if (chooseMode > 4) chooseMode = 0;
-        }
-
-        if (keys & KEY_LEFT)
-        {
-            chooseMode--;
-            if (chooseMode < 0) chooseMode = 4;
-        }
-
-        switch (chooseMode)
-        {
-            case 0: //sys type
-            {
-                if (keys & (KEY_DOWN | KEY_UP))
-                {
-                    sys = (sys == SYS_CTR ? SYS_KTR : SYS_CTR);
-                }
-            } break;
-
-            case 1: // major
-            {
-                if (keys & KEY_DOWN)
-                {
-                    major--;
-                    if (major < 2) major = 2;
-                }
-                if (keys & KEY_UP)
-                {
-                    major++;
-                }
-            } break;
-
-            case 2: // minor
-            {
-                if (keys & KEY_DOWN)
-                {
-                    minor--;
-                    if (minor < 0) minor = 0;
-                }
-                if (keys & KEY_UP)
-                {
-                    minor++;
-                    if (minor > 9) minor = 9;
-                }
-            } break;
-
-            case 3: // fix
-            {
-                if (keys & KEY_DOWN)
-                {
-                    fix--;
-                    if (fix < 0) fix = 0;
-                }
-                if (keys & KEY_UP)
-                {
-                    fix++;
-                    if (fix > 9) fix = 9;
-                }
-            } break;
-
-            case 4: // region
-            {
-                if (keys & KEY_DOWN)
-                {
-                    reg--;
-                    if (reg < REG_USA) reg = REG_TWN;
-                }
-                if (keys & KEY_UP)
-                {
-                    reg++;
-                    if (reg > REG_TWN) reg = REG_USA;
-                }
-            } break;
-        }
-
-        if (keys & KEY_A)
-        {
-            printf("Downloading firmware : %s %d.%d.%d%s\n", (sys == SYS_KTR ? "New3DS" : "Old3DS"), major, minor, fix, GetRegionString((SystemRegion)reg).c_str());
-            DownloadFirmware(sys, (SystemRegion)reg, to_string(major) + "." + to_string(minor) + "." + to_string(fix), FDFolder);
-            printf("Download complete\n");
-        }
-
-        if (keys & KEY_START) break;
-        gfxFlushBuffers();
-        gfxSwapBuffers();
+        amInit();
+        AM_InitializeExternalTitleDatabase(false);
     }
 
+    init_menu(GFX_TOP);
+
+    // Make sure all CIAngel directories exists on the SD card
+    mkpath("/CIAngel", 0777);
+    mkpath("/CIAngel/tmp/", 0777);
+    loadConfig();
+    
+    // Set up the reading of json
+    check_JSON();
+    load_JSON_data();
+    
+    menu_main();
+
+    if (bSvcHaxAvailable)
+    {
+        amExit();
+    }
+
+    cfguExit();
+    acExit();
     gfxExit();
     hidExit();
     httpcExit();
